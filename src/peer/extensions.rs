@@ -1,5 +1,5 @@
-use std::boxed::Box;
 use std::collections::HashMap;
+use std::{boxed::Box, sync::atomic::Ordering};
 
 use crate::{
     Peer,
@@ -36,7 +36,12 @@ impl Peer {
 
             if let Some(extensions) = maybe_extensions {
                 if payload.extension_id == ExtensionType::Handshake as u8 {
-                    update_extensions(extensions, payload)?
+                    let handshake = serde_bencode::from_bytes::<HandshakeExtension>(&payload.data)?;
+                    dbg!(&handshake);
+                    if let Some(max_req) = handshake.other.reqq {
+                        self.state.0.max_req.store(max_req, Ordering::Relaxed);
+                    }
+                    update_extensions_from_handshake(extensions, handshake)
                 } else if let Some(ext_type) =
                     ACTIVE_EXTENSIONS.get(payload.extension_id as usize - 1)
                     && let Some(extension) = extensions
@@ -86,12 +91,10 @@ impl Peer {
     }
 }
 
-fn update_extensions(
+fn update_extensions_from_handshake(
     extensions: &mut HashMap<u8, Box<dyn ExtensionHandler>>,
-    payload: BasicExtensionPayload,
-) -> Result<Vec<ExtensionAction>, PeerError> {
-    let handshake = serde_bencode::from_bytes::<HandshakeExtension>(&payload.data)?;
-    dbg!(&handshake);
+    handshake: HandshakeExtension,
+) -> Vec<ExtensionAction> {
     let mut actions = Vec::new();
     for (msg_type, msg_id) in handshake.m {
         if msg_id == 0 {
@@ -104,5 +107,5 @@ fn update_extensions(
         extensions.insert(msg_id, new_extension);
     }
 
-    Ok(actions)
+    actions
 }

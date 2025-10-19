@@ -13,7 +13,7 @@ use crate::{
         magnet_links::{MagnetLink, metadata_piece_manager::MetadataPieceManager},
     },
     messages::payloads::{BitfieldPayload, HavePayload, RequestPiecePayload, ResponsePiecePayload},
-    peer::conn::PeerState,
+    peer::{DEFAULT_MAX_REQUESTS, conn::PeerState},
     peer_manager::{
         error::PeerManagerError,
         piece_manager::{PieceManager, piece_selector::PieceSelector},
@@ -26,7 +26,6 @@ mod piece_manager;
 
 type PeerId = [u8; 20];
 
-pub const BLOCK_QUEUE_SIZE_MAX: usize = 100;
 /// how many pieces are in the queue at max
 pub(crate) const MAX_PIECES_IN_PARALLEL: usize = 20;
 
@@ -286,6 +285,7 @@ impl PeerManager {
                     }
                 }
                 ReqMessage::NeedBlockQueue => {
+                    let max_req = self.get_peers_max_req(&peer_msg.peer_id);
                     if let TorrentState::Downloading {
                         metainfo,
                         piece_manager,
@@ -293,7 +293,7 @@ impl PeerManager {
                     {
                         if let Some(blocks) = piece_manager.prepare_next_blocks(
                             &mut self.piece_selector,
-                            BLOCK_QUEUE_SIZE_MAX,
+                            max_req as usize,
                             &peer_msg.peer_id,
                             metainfo,
                         ) {
@@ -378,7 +378,7 @@ impl PeerManager {
         Ok(())
     }
 
-    async fn send_peer(&mut self, peer_id: [u8; 20], msg: ResMessage) {
+    async fn send_peer(&mut self, peer_id: PeerId, msg: ResMessage) {
         if let Some(peer) = self.peers.get_mut(&peer_id)
             && peer.send(msg, peer_id).await.is_ok()
         {
@@ -392,6 +392,21 @@ impl PeerManager {
             let _ = conn.send(msg.clone(), peer_id).await;
             // if we fail to send here, it doesn't really matter tbh
         }
+    }
+
+    fn get_peers_max_req(&self, id: &PeerId) -> u32 {
+        self.peers
+            .get(id)
+            .and_then(|p| {
+                Some(
+                    p.identifier
+                        .0
+                        .max_req
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                        - 10, // probably just as a margin
+                )
+            })
+            .unwrap_or(DEFAULT_MAX_REQUESTS)
     }
 
     fn is_finished(&self) -> bool {
