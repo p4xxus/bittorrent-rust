@@ -1,10 +1,11 @@
 use bytes::BytesMut;
-use rand::seq::IteratorRandom;
 
 use crate::{
     BLOCK_MAX,
     messages::payloads::RequestPiecePayload,
-    peer_manager::{BlockState, MAX_PIECES_IN_PARALLEL, PeerId, PieceManager, PieceState},
+    peer_manager::{
+        BlockState, MAX_PIECES_IN_PARALLEL, PeerId, PieceManager, PieceSelector, PieceState,
+    },
     torrent::Metainfo,
 };
 
@@ -15,20 +16,20 @@ impl PieceManager {
     /// returns a list of blocks that we want to request
     pub(in crate::peer_manager) fn prepare_next_blocks(
         &mut self,
+        piece_selector: &mut PieceSelector,
         n: usize,
         peer_id: &PeerId,
         metainfo: &Metainfo,
     ) -> Option<Vec<RequestPiecePayload>> {
-        let piece = if let Some(peer_has) = self.piece_selector.get_peer_has(peer_id) {
+        let piece = if let Some(peer_has) = piece_selector.get_peer_has(peer_id) {
             if let Some(piece) = self.download_queue.get_queue_for_peer(peer_has) {
                 Some(piece)
             } else {
                 // a bit awkard tbh
                 let peer_has = peer_has.clone();
 
-                if let Some(queue) = self
-                    .piece_selector
-                    .select_pieces_for_peer(peer_id, 3 /* TODO */)
+                if let Some(queue) =
+                    piece_selector.select_pieces_for_peer(peer_id, 3 /* TODO */)
                 {
                     self.download_queue.add_pieces_to_queue(queue, metainfo);
                 }

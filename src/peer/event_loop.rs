@@ -71,14 +71,19 @@ impl Peer {
                         }
                         ResMessage::WeHave(bitfield) => {
                             // later TODO: implement lazy bitfield?
-                            if bitfield.is_finished() {
-                                self.set_interested(false).await?;
+                            // also we might make this cleaner
+                            if let Some(bitfield) = bitfield {
+                                if bitfield.is_finished() {
+                                    self.set_interested(false).await?;
+                                } else {
+                                    self.set_interested(true).await?;
+                                    if !bitfield.is_empty() {
+                                        self.send_peer(PeerMessage::Bitfield(bitfield)).await?;
+                                    }
+                                }
                             } else {
                                 self.set_interested(true).await?;
-                                if !bitfield.is_empty() {
-                                    self.send_peer(PeerMessage::Bitfield(bitfield)).await?;
-                                }
-                            }
+                            };
                         }
                         ResMessage::ExtensionData((ext_type, data)) => {
                             let msg = {
@@ -111,7 +116,6 @@ impl Peer {
                         PeerMessage::Unchoke(_no_payload) => {
                             eprintln!("PEER UNCHOKES");
                             self.state.0.peer_choking.store(false, Ordering::Relaxed);
-                            self.send_peer(PeerMessage::Unchoke(NoPayload)).await?;
                         }
                         PeerMessage::Interested(_no_payload) => {
                             self.state.0.peer_interested.store(true, Ordering::Relaxed);

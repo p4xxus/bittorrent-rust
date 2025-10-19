@@ -23,8 +23,13 @@ impl BitfieldPayload {
     pub(crate) fn is_finished(&self) -> bool {
         self.pieces_available.iter().all(|b| *b)
     }
+    // so the motivation here was to get the correct size of the bitfield payload since it might be too long
+    // however we have the number of pieces only in the metadata which we might not have yet
     pub(crate) fn get_correct_len(self, n_pieces: usize) -> Vec<bool> {
         self.pieces_available.into_iter().take(n_pieces).collect()
+    }
+    pub(crate) fn get_pieces(self) -> Vec<bool> {
+        self.pieces_available
     }
 }
 impl Payload for BitfieldPayload {

@@ -56,6 +56,44 @@ impl PieceSelector {
         }
     }
 
+    /// since we might not possess the correct bitfield of ourselves, we need to initialize this first with an empty length
+    /// and then we can initialize it for real.
+    ///
+    /// The `bitfield` must be the correct length
+    pub(in crate::peer_manager) fn update_from_self_have(&mut self, bitfield: Vec<bool>) {
+        let n_pieces = bitfield.len();
+
+        // set our own have bitfield
+        self.have = bitfield;
+
+        // update peer bitfields to be correct len
+        for peer_bitfields in self.peer_bitfields.values_mut() {
+            peer_bitfields.drain(n_pieces..);
+        }
+
+        // recalculate piece_rarity
+        self.piece_rarity =
+            self.peer_bitfields
+                .values()
+                .fold(vec![0u32; n_pieces], |acc, bitfield| {
+                    acc.iter()
+                        .zip(bitfield)
+                        .map(|(count, b)| match *b {
+                            true => count + 1,
+                            false => *count,
+                        })
+                        .collect()
+                });
+
+        // update priority queue
+        for (id, bitfield) in self.peer_bitfields.clone().into_iter() {
+            self.add_peer_bitfield(&id, bitfield);
+        }
+
+        // allocate space for the pieces in flight
+        self.pieces_in_flight.resize(n_pieces, false);
+    }
+
     pub(in crate::peer_manager) fn add_peer(&mut self, id: PeerId) {
         if let Some(old) = self.peer_bitfields.insert(id, Vec::new()) {
             // this shouldn't happen, but if it does we're safe
@@ -72,7 +110,10 @@ impl PieceSelector {
 
     /// updates the priority queue if the peer sent us his bitfield
     /// if the piece is not added via `add_peer` yet, it will do nothing
-    pub(in crate::peer_manager) fn add_bitfield(&mut self, id: &PeerId, bitfield: Vec<bool>) {
+    pub(in crate::peer_manager) fn add_peer_bitfield(&mut self, id: &PeerId, bitfield: Vec<bool>) {
+        if bitfield.is_empty() {
+            return;
+        }
         if let Some(peer_bitfield) = self.peer_bitfields.get_mut(id) {
             *peer_bitfield = bitfield.clone();
             self.update_prio_queue(bitfield, true);
@@ -80,7 +121,7 @@ impl PieceSelector {
     }
 
     /// updates the priority queue if the peer sent us a have message
-    pub(in crate::peer_manager) fn update_have(&mut self, id: &PeerId, have_index: u32) {
+    pub(in crate::peer_manager) fn update_from_peer_have(&mut self, id: &PeerId, have_index: u32) {
         // for easier indexing
         let i = have_index as usize;
         if let Some(peer_bitfield) = self.peer_bitfields.get_mut(id)
@@ -89,7 +130,7 @@ impl PieceSelector {
         {
             *b_peer = true;
             *rarity += 1;
-            if !self.have[i] {
+            if self.have.get(i).is_some_and(|b| !b) {
                 self.priority_queue.push(Reverse((*rarity, have_index)));
             }
         }
@@ -112,7 +153,11 @@ impl PieceSelector {
         {
             let i = piece_i as usize;
             // the priority queue doesn't have to be up to date since we don't remove values if we receive e.g. a have message
-            if self.piece_rarity[i] == count && bitfield[i] && !self.pieces_in_flight[i] {
+            if self.piece_rarity[i] == count
+                && let Some(b_p) = bitfield.get(i)
+                && *b_p
+                && !self.pieces_in_flight[i]
+            {
                 queue.push(piece_i);
                 self.pieces_in_flight[i] = true;
             }
@@ -122,6 +167,9 @@ impl PieceSelector {
 
     /// updates both priority queues with a bitfield and whether it should increase or decrease the count
     fn update_prio_queue(&mut self, bitfield: impl IntoIterator<Item = bool>, increase: bool) {
+        if self.have.is_empty() {
+            return;
+        }
         self.piece_rarity
             .iter_mut()
             .enumerate()
@@ -136,10 +184,13 @@ impl PieceSelector {
                     self.priority_queue.push(Reverse((*count, i as u32)));
                 }
             });
-        dbg!(&self.priority_queue);
     }
 
     pub(in crate::peer_manager) fn get_peer_has(&self, id: &PeerId) -> Option<&Vec<bool>> {
         self.peer_bitfields.get(id)
+    }
+
+    pub(in crate::peer_manager) fn get_have(&self) -> &Vec<bool> {
+        &self.have
     }
 }

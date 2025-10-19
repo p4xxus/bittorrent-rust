@@ -7,31 +7,29 @@ use crate::{
     Torrent,
     database::DBConnection,
     peer_manager::{
-        PieceState,
-        error::PeerManagerError,
-        piece_manager::{piece_selector::PieceSelector, req_preparer::DownloadQueue},
+        PieceState, error::PeerManagerError, piece_manager::req_preparer::DownloadQueue,
     },
 };
 mod file_manager;
-mod piece_selector;
+pub(super) mod piece_selector;
 mod req_preparer;
 
 #[derive(Debug)]
 pub(super) struct PieceManager {
-    pub(super) piece_selector: PieceSelector,
     /// if it's None, we are finished
-    pub(super) download_queue: DownloadQueue,
+    download_queue: DownloadQueue,
     db_conn: DBConnection,
     /// the output file
     file: File,
 }
 
 impl PieceManager {
-    pub(super) async fn new(
+    /// returns itself and the bitfield of pieces we have
+    pub(super) async fn build(
         db_conn: DBConnection,
         file_path: Option<PathBuf>,
         torrent: &Torrent,
-    ) -> Result<Self, PeerManagerError> {
+    ) -> Result<(Self, Vec<bool>), PeerManagerError> {
         let file_path = file_path.unwrap_or(torrent.info.name.clone().into());
         let file_entry = db_conn.get_entry().await?;
         let file_existed = file_entry.is_some();
@@ -58,15 +56,13 @@ impl PieceManager {
             DownloadQueue::new()
         };
 
-        Ok(PieceManager {
-            piece_selector: PieceSelector::new(file_entry.bitfield.to_vec()),
-            download_queue,
-            db_conn,
-            file,
-        })
-    }
-
-    pub(super) fn get_have(&self) -> &Vec<bool> {
-        &self.piece_selector.have
+        Ok((
+            PieceManager {
+                download_queue,
+                db_conn,
+                file,
+            },
+            file_entry.bitfield.to_vec(),
+        ))
     }
 }
