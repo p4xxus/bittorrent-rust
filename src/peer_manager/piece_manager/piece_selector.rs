@@ -142,13 +142,13 @@ impl PieceSelector {
     // - (if yes) is the piece even up-to-date
     // - (if yes) does the peer even have that piece
     // - (if yes) is the piece already requested by any peer
-    /// selects `count` amount of pieces from a peer so he can request them
+    /// selects `count` amount of pieces from a peer so we can request them
     pub(super) fn select_pieces_for_peer(&mut self, id: &PeerId, count: usize) -> Option<Vec<u32>> {
         let Some(bitfield) = self.peer_bitfields.get(id) else {
             return None;
         };
         let mut queue = Vec::with_capacity(count);
-        while queue.len() <= queue.capacity()
+        while queue.len() <= count
             && let Some(Reverse((count, piece_i))) = self.priority_queue.pop()
         {
             let i = piece_i as usize;
@@ -187,7 +187,9 @@ impl PieceSelector {
     }
 
     pub(in crate::peer_manager) fn get_peer_has(&self, id: &PeerId) -> Option<&Vec<bool>> {
-        self.peer_bitfields.get(id)
+        self.peer_bitfields
+            .get(id)
+            .and_then(|b| (!b.is_empty()).then(|| b))
     }
 
     pub(in crate::peer_manager) fn get_have(&self) -> &Vec<bool> {

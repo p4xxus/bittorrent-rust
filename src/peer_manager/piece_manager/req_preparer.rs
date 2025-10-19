@@ -21,46 +21,30 @@ impl PieceManager {
         peer_id: &PeerId,
         metainfo: &Metainfo,
     ) -> Option<Vec<RequestPiecePayload>> {
-        let piece = if let Some(peer_has) = piece_selector.get_peer_has(peer_id) {
-            if let Some(piece) = self.download_queue.get_queue_for_peer(peer_has) {
-                Some(piece)
-            } else {
-                // a bit awkard tbh
-                let peer_has = peer_has.clone();
-
+        // TODO: we only select one piece but if the piece is only 3 blocks big, we can never get to like 255 requests going out
+        let mut requests = Vec::with_capacity(n);
+        while requests.len() < n
+            && let Some(peer_has) = piece_selector.get_peer_has(peer_id)
+        {
+            let Some(piece) = self.download_queue.get_piece_for_peer(peer_has) else {
                 if let Some(queue) =
-                    piece_selector.select_pieces_for_peer(peer_id, 3 /* TODO */)
+                    piece_selector.select_pieces_for_peer(peer_id, MAX_PIECES_IN_PARALLEL)
                 {
                     self.download_queue.add_pieces_to_queue(queue, metainfo);
+                    continue;
+                } else {
+                    break;
                 }
-                self.download_queue.get_queue_for_peer(&peer_has)
-            }
-        } else {
-            None
-        }?;
+            };
 
-        let mut requests = Vec::with_capacity(n);
-        let n_blocks = piece.blocks.capacity() as u32;
-        let piece_size = piece.buf.capacity() as u32;
-
-        for (block_i, block) in piece
-            .blocks
-            .iter_mut()
-            .enumerate()
-            .filter(|(_, b)| b.is_none())
-            .take(n)
-        {
-            let block_i = block_i as u32;
-            let index = piece.piece_i;
-            let begin = block_i * BLOCK_MAX;
-            let length = get_block_len(n_blocks, piece_size, block_i);
-            let req = RequestPiecePayload::new(index, begin, length);
-            requests.push(req);
-
-            *block = BlockState::InProcess;
+            let num_blocks_for_piece = n - requests.len();
+            requests.append(&mut piece.prepare_requests_for_piece(num_blocks_for_piece));
         }
-
-        Some(requests)
+        if requests.is_empty() {
+            None
+        } else {
+            Some(requests)
+        }
     }
 }
 
@@ -69,15 +53,15 @@ impl DownloadQueue {
         Self(Vec::with_capacity(MAX_PIECES_IN_PARALLEL))
     }
 
-    fn get_queue_for_peer(&mut self, peer_has: &[bool]) -> Option<&mut PieceState> {
+    /// looks into the queue if there's a piece that the peer has and returns it
+    fn get_piece_for_peer(&mut self, peer_has: &[bool]) -> Option<&mut PieceState> {
         // 1. Try if we have something in the download queue
         let piece_i = self.0.iter().position(|state| {
             let Some(peer_has_it) = peer_has.get(state.piece_i as usize) else {
-                // I've had an occurrence where this failed
-                dbg!("WOAHUFHAKFLA:SFUIOHAF:IUHA:FIUAFIUB");
+                // we shouldn't be here at all
                 return false;
             };
-            let blocks_we_need = state.blocks.iter().filter(|b| b.is_none());
+            let blocks_we_need = state.blocks.iter().filter(|b| b.is_not_requested());
             // TODO: now currently if there's only one block remaining in the queue, it will return only that one
             // we might want to return that plus like 9 more of the next piece
             *peer_has_it && blocks_we_need.count() >= 1
@@ -89,8 +73,7 @@ impl DownloadQueue {
         Some(self.0.get_mut(piece_i).expect("we checked that before"))
     }
 
-    /// checks whether the queue is full, if not adds a new item
-    /// returns whether a new piece is added (true) or not (false)
+    /// really just adds the pieces given into the queue
     pub(in crate::peer_manager) fn add_pieces_to_queue(
         &mut self,
         pieces: Vec<u32>,
@@ -114,6 +97,27 @@ impl PieceState {
             piece_i,
             buf: BytesMut::zeroed(piece_size as usize),
         }
+    }
+
+    fn prepare_requests_for_piece(&mut self, n: usize) -> Vec<RequestPiecePayload> {
+        let n_blocks = self.blocks.capacity() as u32;
+        let piece_size = self.buf.capacity() as u32;
+
+        self.blocks
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, b)| b.is_not_requested())
+            .take(n)
+            .map(|(block_i, block)| {
+                let block_i = block_i as u32;
+                let index = self.piece_i;
+                let begin = block_i * BLOCK_MAX;
+                let length = get_block_len(n_blocks, piece_size, block_i);
+
+                *block = BlockState::InProcess;
+                RequestPiecePayload::new(index, begin, length)
+            })
+            .collect()
     }
 }
 

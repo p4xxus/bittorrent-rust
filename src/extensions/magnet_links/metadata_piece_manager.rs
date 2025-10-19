@@ -60,7 +60,6 @@ impl MetadataPieceManager {
         else {
             return Ok(None);
         };
-        dbg!(piece_index);
         self.queue[piece_index] = BlockState::InProcess;
         let msg = MetadataMsg {
             msg_type: MetadataMsgType::Request,
