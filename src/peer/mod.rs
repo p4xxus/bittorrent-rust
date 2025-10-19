@@ -11,6 +11,8 @@ use crate::peer::conn::{BoxedMsgStream, PeerState};
 use crate::peer::error::PeerError;
 use crate::peer_manager::{ReqMessage, ReqMsgFromPeer, ResMessage};
 
+pub const DEFAULT_MAX_REQUESTS: u32 = 100;
+
 pub mod conn;
 mod error;
 mod event_loop;

@@ -8,7 +8,8 @@ use crate::{
     BLOCK_MAX,
     messages::payloads::{RequestPiecePayload, ResponsePiecePayload},
     peer_manager::{
-        BlockState, PieceManager, error::PeerManagerError, piece_manager::DownloadQueue,
+        BlockState, PieceManager, PieceSelector, error::PeerManagerError,
+        piece_manager::DownloadQueue,
     },
     torrent::Metainfo,
 };
@@ -19,11 +20,13 @@ impl PieceManager {
     /// returns Some index of the piece if it's finished
     pub(in crate::peer_manager) async fn write_block(
         &mut self,
+        piece_selector: &mut PieceSelector,
         block: ResponsePiecePayload,
         metainfo: &Metainfo,
     ) -> Result<Option<u32>, PeerManagerError> {
         if let Some(piece_state) = self.download_queue.update_piece_state(block) {
-            self.handle_piece(&piece_state, metainfo).await?;
+            self.handle_piece(piece_selector, &piece_state, metainfo)
+                .await?;
             Ok(Some(piece_state.piece_i))
         } else {
             Ok(None)
@@ -34,6 +37,7 @@ impl PieceManager {
     // if this fails somewhere, it should be fine since the piece will get picked up later again
     async fn handle_piece(
         &mut self,
+        piece_selector: &mut PieceSelector,
         piece_state: &PieceState,
         metainfo: &Metainfo,
     ) -> Result<(), PeerManagerError> {
@@ -45,11 +49,11 @@ impl PieceManager {
 
         // we first calculate the new bitfield, then update it in the DB and lastly update the struct
         // this is so if the DB fails, the struct is still in the old state
-        let mut new_bitfield = self.have.clone();
+        let mut new_bitfield = piece_selector.get_have().clone();
         let piece_i = piece_state.piece_i as usize;
         new_bitfield[piece_i] = true;
         self.db_conn.update_bitfields(new_bitfield).await?;
-        self.have[piece_i] = true;
+        piece_selector.have[piece_i] = true;
 
         Ok(())
     }
@@ -70,9 +74,13 @@ impl PieceManager {
     /// returns a block a peer requested
     pub(in crate::peer_manager) fn get_block(
         &self,
+        piece_selector: &mut PieceSelector,
         req_payload: RequestPiecePayload,
         metainfo: &Metainfo,
     ) -> Option<ResponsePiecePayload> {
+        if !piece_selector.get_have()[req_payload.index as usize] {
+            return None;
+        }
         let mut buf = BytesMut::zeroed(req_payload.length as usize);
         let offset =
             req_payload.index as u64 * metainfo.piece_length as u64 + req_payload.begin as u64;
@@ -86,10 +94,6 @@ impl PieceManager {
             block: buf.freeze(),
         };
         Some(res)
-    }
-
-    pub(in crate::peer_manager) fn is_finished(&self) -> bool {
-        self.have.iter().all(|b| *b)
     }
 }
 

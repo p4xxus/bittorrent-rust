@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 
 use futures_core::Stream;
@@ -22,6 +23,7 @@ use tokio_util::time::FutureExt;
 
 use crate::extensions::ExtensionHandler;
 use crate::messages::{MessageFramer, PeerMessage};
+use crate::peer::DEFAULT_MAX_REQUESTS;
 use crate::peer::Msg;
 use crate::peer::Peer;
 use crate::peer::error::PeerError;
@@ -138,9 +140,9 @@ pub(crate) struct PeerStateInner {
     pub(crate) am_interested: AtomicBool,
     pub(crate) peer_choking: AtomicBool,
     pub(crate) peer_interested: AtomicBool,
-    /// the bitfield of the other peer
-    pub(crate) has: Mutex<Vec<bool>>,
+    pub(crate) max_req: AtomicU32,
     /// maps extended message ID to names of extensions
+    /// TODO: we definetly don't need this here
     pub(crate) extensions: Mutex<Option<HashMap<u8, Box<dyn ExtensionHandler>>>>,
 }
 
@@ -157,8 +159,8 @@ impl PeerState {
             am_interested: AtomicBool::new(false),
             peer_choking: AtomicBool::new(true),
             peer_interested: AtomicBool::new(false),
-            has: Mutex::new(Vec::new()),
             extensions: Mutex::new(extensions),
+            max_req: AtomicU32::new(DEFAULT_MAX_REQUESTS),
         };
         Self(Arc::new(peer_identifier_inner))
     }

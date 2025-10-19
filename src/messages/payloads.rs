@@ -9,14 +9,27 @@ pub trait Payload {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitfieldPayload {
     /// a bitfield with each index that downloader has sent set to one and the rest set to zero
-    pub(crate) pieces_available: Vec<bool>,
+    pieces_available: Vec<bool>,
 }
 impl BitfieldPayload {
+    pub(crate) fn new(bitfield: impl IntoIterator<Item = bool>) -> Self {
+        Self {
+            pieces_available: bitfield.into_iter().collect(),
+        }
+    }
     pub(crate) fn is_empty(&self) -> bool {
         self.pieces_available.iter().all(|b| !*b)
     }
     pub(crate) fn is_finished(&self) -> bool {
         self.pieces_available.iter().all(|b| *b)
+    }
+    // so the motivation here was to get the correct size of the bitfield payload since it might be too long
+    // however we have the number of pieces only in the metadata which we might not have yet
+    pub(crate) fn get_correct_len(self, n_pieces: usize) -> Vec<bool> {
+        self.pieces_available.into_iter().take(n_pieces).collect()
+    }
+    pub(crate) fn get_pieces(self) -> Vec<bool> {
+        self.pieces_available
     }
 }
 impl Payload for BitfieldPayload {

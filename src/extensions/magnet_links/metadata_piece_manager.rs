@@ -45,18 +45,21 @@ impl MetadataPieceManager {
             .iter()
             .position(|i_have| *i_have == BlockState::None)
             .or_else(|| {
-                self.queue
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, i_have)| (*i_have == BlockState::InProcess).then(|| index))
-                    .choose(&mut rand::rng())
+                self.check_finished().then(|| {
+                    self.queue
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, i_have)| {
+                            (*i_have == BlockState::InProcess).then(|| index)
+                        })
+                        .choose(&mut rand::rng())
+                })?
             })
         // Note that one peer will not get the same request twice since it won't ask for another if it's waiting for the response of one.
         // If it got the response, it won't get the piece again anyways.
         else {
             return Ok(None);
         };
-        dbg!(piece_index);
         self.queue[piece_index] = BlockState::InProcess;
         let msg = MetadataMsg {
             msg_type: MetadataMsgType::Request,

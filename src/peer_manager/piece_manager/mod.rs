@@ -11,13 +11,11 @@ use crate::{
     },
 };
 mod file_manager;
+pub(super) mod piece_selector;
 mod req_preparer;
 
 #[derive(Debug)]
 pub(super) struct PieceManager {
-    /// I need this information too often to always query the DB
-    /// so let's cache it
-    pub(super) have: Vec<bool>,
     /// if it's None, we are finished
     download_queue: DownloadQueue,
     db_conn: DBConnection,
@@ -26,14 +24,16 @@ pub(super) struct PieceManager {
 }
 
 impl PieceManager {
-    pub(super) async fn new(
+    /// returns itself and the bitfield of pieces we have
+    pub(super) async fn build(
         db_conn: DBConnection,
         file_path: Option<PathBuf>,
         torrent: &Torrent,
-    ) -> Result<Self, PeerManagerError> {
+    ) -> Result<(Self, Vec<bool>), PeerManagerError> {
         let file_path = file_path.unwrap_or(torrent.info.name.clone().into());
         let file_entry = db_conn.get_entry().await?;
         let file_existed = file_entry.is_some();
+
         let file_entry = if let Some(file_entry) = file_entry {
             file_entry
         } else {
@@ -56,11 +56,13 @@ impl PieceManager {
             DownloadQueue::new()
         };
 
-        Ok(PieceManager {
-            have: file_entry.bitfield.to_vec(),
-            download_queue,
-            db_conn,
-            file,
-        })
+        Ok((
+            PieceManager {
+                download_queue,
+                db_conn,
+                file,
+            },
+            file_entry.bitfield.to_vec(),
+        ))
     }
 }
