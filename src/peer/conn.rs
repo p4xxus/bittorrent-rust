@@ -64,7 +64,7 @@ impl Peer {
             .await?;
         println!("peer {} connected", tcp.peer_addr().unwrap());
 
-        let peer_state = PeerState::new(handshake_recv);
+        let peer_state = PeerState::new(handshake_recv.peer_id);
 
         // after the handshake as succeeded we can create the message framer that de- & encodes the messages
         // from the tcp stream
@@ -75,12 +75,20 @@ impl Peer {
         let (peer_writer, peer_reader) = framed.split();
         let receiver_stream = Some(get_stream(peer_reader, peer_manager_rx).await);
 
+        // set up extensions
+        let extensions = if handshake_recv.has_extensions_enabled() {
+            Some(HashMap::new())
+        } else {
+            None
+        };
+
         Ok(Self {
             state: peer_state,
             queue: crate::peer::ReqQueue::new(),
             peer_manager_tx,
             peer_writer,
             receiver_stream,
+            extensions: Mutex::new(extensions),
         })
     }
 }
@@ -145,25 +153,16 @@ pub(crate) struct PeerStateInner {
     pub(crate) peer_choking: AtomicBool,
     pub(crate) peer_interested: AtomicBool,
     pub(crate) max_req: AtomicU32,
-    /// maps extended message ID to names of extensions
-    /// TODO: we definitely don't need this here
-    pub(crate) extensions: Mutex<Option<HashMap<u8, Box<dyn ExtensionHandler>>>>,
 }
 
 impl PeerState {
-    pub(crate) fn new(handshake: Handshake) -> Self {
-        let extensions = if handshake.has_extensions_enabled() {
-            Some(HashMap::new())
-        } else {
-            None
-        };
+    pub(crate) fn new(peer_id: [u8; 20]) -> Self {
         let peer_identifier_inner = PeerStateInner {
-            peer_id: handshake.peer_id,
+            peer_id,
             am_choking: AtomicBool::new(true),
             am_interested: AtomicBool::new(false),
             peer_choking: AtomicBool::new(true),
             peer_interested: AtomicBool::new(false),
-            extensions: Mutex::new(extensions),
             max_req: AtomicU32::new(DEFAULT_MAX_REQUESTS),
         };
         Self(Arc::new(peer_identifier_inner))

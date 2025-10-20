@@ -15,7 +15,7 @@ use crate::{
 
 impl Peer {
     pub(super) async fn send_extended_handshake(&mut self) -> Result<(), PeerError> {
-        if self.state.0.extensions.lock().unwrap().is_some() {
+        if self.extensions.lock().unwrap().is_some() {
             let handshake_extension = HandshakeExtension::new();
             dbg!(&handshake_extension);
             self.send_peer(PeerMessage::Extended(BasicExtensionPayload {
@@ -32,7 +32,7 @@ impl Peer {
         payload: BasicExtensionPayload,
     ) -> Result<(), PeerError> {
         let actions_to_do = {
-            let maybe_extensions = &mut *self.state.0.extensions.lock().unwrap();
+            let maybe_extensions = &mut *self.extensions.lock().unwrap();
 
             if let Some(extensions) = maybe_extensions {
                 if payload.extension_id == ExtensionType::Handshake as u8 {

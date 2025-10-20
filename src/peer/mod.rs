@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 
 use futures_util::{self, SinkExt};
 use tokio::sync::mpsc;
 
+use crate::extensions::ExtensionHandler;
 use crate::messages::PeerMessage;
 use crate::messages::payloads::NoPayload;
 use crate::peer::conn::PeerWriter;
@@ -34,6 +37,8 @@ pub struct Peer {
     peer_writer: PeerWriter,
     // this is an Option because the event-loop takes the Stream and leaves a None in its place while running
     receiver_stream: Option<BoxedMsgStream>,
+    /// maps extended message ID to the handler for the extension
+    pub(crate) extensions: Mutex<Option<HashMap<u8, Box<dyn ExtensionHandler>>>>,
 }
 struct ReqQueue {
     to_send: Vec<PeerMessage>,
