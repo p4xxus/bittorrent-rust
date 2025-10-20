@@ -114,7 +114,7 @@ impl PieceState {
                 let begin = block_i * BLOCK_MAX;
                 let length = get_block_len(n_blocks, piece_size, block_i);
 
-                *block = BlockState::InProcess;
+                *block = BlockState::InProcess(std::time::Instant::now());
                 RequestPiecePayload::new(index, begin, length)
             })
             .collect()

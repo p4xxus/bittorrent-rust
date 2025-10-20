@@ -173,9 +173,8 @@ impl PieceSelector {
         self.piece_rarity
             .iter_mut()
             .enumerate()
-            .zip(bitfield)
-            .zip(&self.have)
-            .for_each(|(((i, count), b_p), b_i)| {
+            .zip(bitfield.into_iter().zip(&self.have))
+            .for_each(|((i, count), (b_p, b_i))| {
                 if b_p && !b_i {
                     match increase {
                         true => *count += 1,

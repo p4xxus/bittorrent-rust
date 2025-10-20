@@ -34,6 +34,9 @@ use crate::peer_manager::ReqMsgFromPeer;
 use crate::peer_manager::ResMessage;
 use crate::torrent::InfoHash;
 
+const CHANNEL_SIZE: usize = 16;
+const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+
 impl Peer {
     pub async fn connect_from_addr(
         addr: SocketAddrV4,
@@ -87,11 +90,12 @@ async fn get_stream(
     peer_manager_rx: Receiver<ResMessage>,
 ) -> BoxedMsgStream {
     let peer_msg_stream = unfold(framed_rx, |mut framed| async move {
-        match framed.next().timeout(Duration::from_secs(120)).await {
+        match framed.next().timeout(KEEPALIVE_TIMEOUT).await {
             Ok(Some(Ok(message))) => Some((Msg::Data(message), framed)),
             Err(_) => Some((Msg::Timeout, framed)),
             Ok(None) => {
                 // nothing really happens here
+                // we haven't received all the data yet
                 None
             }
             Ok(Some(Err(e))) => {
@@ -169,7 +173,7 @@ impl PeerState {
         &self,
         peer_manager_tx: &Sender<ReqMsgFromPeer>,
     ) -> Result<Receiver<ResMessage>, PeerError> {
-        let (sender, peer_manager_rx) = mpsc::channel(16);
+        let (sender, peer_manager_rx) = mpsc::channel(CHANNEL_SIZE);
         let peer_conn = PeerConn {
             sender,
             identifier: self.clone(),
