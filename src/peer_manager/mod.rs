@@ -1,6 +1,6 @@
 //! a peer announces to us that he exists via the mpsc
 //! We create peer with our current have bitfield which he can send to new connections and we send
-use std::{collections::HashMap, fmt::Debug, path::PathBuf};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf, time::Duration};
 
 use bytes::{Bytes, BytesMut};
 use tokio::sync::mpsc;
@@ -28,6 +28,8 @@ type PeerId = [u8; 20];
 
 /// how many pieces are in the queue at max
 pub(crate) const MAX_PIECES_IN_PARALLEL: usize = 20;
+/// after what Duration to re-request blocks
+const TIMEOUT_FOR_REQ: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub struct PeerManager {
@@ -169,7 +171,7 @@ impl Debug for PieceState {
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub(crate) enum BlockState {
     Finished,
-    InProcess,
+    InProcess(std::time::Instant),
     None,
 }
 
@@ -179,6 +181,7 @@ impl BlockState {
     }
     pub(self) fn is_not_requested(&self) -> bool {
         *self == BlockState::None
+            || matches!(self, BlockState::InProcess(i) if i.elapsed() >= TIMEOUT_FOR_REQ)
     }
 }
 
@@ -314,9 +317,8 @@ impl PeerManager {
                 ReqMessage::WhatDoWeHave => {
                     let have = self.piece_selector.get_have();
                     let have = if have.is_empty() { None } else { Some(have) };
-                    let msg = ResMessage::WeHave(
-                        have.and_then(|have| Some(BitfieldPayload::new(have.clone()))),
-                    );
+                    let msg =
+                        ResMessage::WeHave(have.map(|have| BitfieldPayload::new(have.clone())));
                     self.send_peer(peer_msg.peer_id, msg).await;
                 }
                 ReqMessage::Extension(extension_message) => {
@@ -397,14 +399,12 @@ impl PeerManager {
     fn get_peers_max_req(&self, id: &PeerId) -> u32 {
         self.peers
             .get(id)
-            .and_then(|p| {
-                Some(
-                    p.identifier
-                        .0
-                        .max_req
-                        .load(std::sync::atomic::Ordering::Relaxed)
-                        - 10, // probably just as a margin
-                )
+            .map(|p| {
+                p.identifier
+                    .0
+                    .max_req
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    - 10 // probably just as a margin
             })
             .unwrap_or(DEFAULT_MAX_REQUESTS)
     }

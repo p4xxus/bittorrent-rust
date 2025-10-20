@@ -58,12 +58,10 @@ impl DownloadQueue {
         // 1. Try if we have something in the download queue
         let piece_i = self.0.iter().position(|state| {
             let Some(peer_has_it) = peer_has.get(state.piece_i as usize) else {
-                // we shouldn't be here at all
+                // this happens if a peer has not yet sent his bitfield which makes it empty
                 return false;
             };
             let blocks_we_need = state.blocks.iter().filter(|b| b.is_not_requested());
-            // TODO: now currently if there's only one block remaining in the queue, it will return only that one
-            // we might want to return that plus like 9 more of the next piece
             *peer_has_it && blocks_we_need.count() >= 1
         })?;
         // TODO: if we didn't find the piece here, we'll run the piece_selector and call this function again
@@ -114,7 +112,7 @@ impl PieceState {
                 let begin = block_i * BLOCK_MAX;
                 let length = get_block_len(n_blocks, piece_size, block_i);
 
-                *block = BlockState::InProcess;
+                *block = BlockState::InProcess(std::time::Instant::now());
                 RequestPiecePayload::new(index, begin, length)
             })
             .collect()

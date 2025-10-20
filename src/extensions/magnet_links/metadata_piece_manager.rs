@@ -1,5 +1,7 @@
 //! This is all for the PeerManager
 
+use std::time::Duration;
+
 use bytes::{Bytes, BytesMut};
 use rand::seq::IteratorRandom;
 use sha1::{Digest, Sha1};
@@ -12,6 +14,7 @@ use crate::{
 
 /// The metadata is handled in blocks of 16KiB (16384 Bytes).
 const METADATA_BLOCK_SIZE: usize = 1 << 14;
+const TIMEOUT_METADATA_REQ: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 pub(crate) struct MetadataPieceManager {
@@ -50,7 +53,7 @@ impl MetadataPieceManager {
                         .iter()
                         .enumerate()
                         .filter_map(|(index, i_have)| {
-                            (*i_have == BlockState::InProcess).then(|| index)
+                            (matches!(i_have, BlockState::InProcess(_))).then(|| index)
                         })
                         .choose(&mut rand::rng())
                 })?
@@ -60,7 +63,7 @@ impl MetadataPieceManager {
         else {
             return Ok(None);
         };
-        self.queue[piece_index] = BlockState::InProcess;
+        self.queue[piece_index] = BlockState::InProcess(std::time::Instant::now());
         let msg = MetadataMsg {
             msg_type: MetadataMsgType::Request,
             piece_index: piece_index as u32,
@@ -175,7 +178,7 @@ mod tests {
         assert_eq!(msg_0.msg_type, MetadataMsgType::Request);
         assert_eq!(msg_0.piece_index, 0);
         assert_eq!(msg_0.total_size, None);
-        assert_eq!(manager.queue[0], BlockState::InProcess);
+        assert!(matches!(manager.queue[0], BlockState::InProcess(_)));
 
         // Request second block
         let req_data_1 = manager.get_block_req_data().unwrap().unwrap();
