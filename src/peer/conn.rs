@@ -99,7 +99,7 @@ async fn get_stream(
                 None
             }
             Ok(Some(Err(e))) => {
-                panic!("Error occured on PeerReader: {e:?}")
+                panic!("Error occurred on PeerReader: {e:?}")
             }
         }
     });
@@ -146,7 +146,7 @@ pub(crate) struct PeerStateInner {
     pub(crate) peer_interested: AtomicBool,
     pub(crate) max_req: AtomicU32,
     /// maps extended message ID to names of extensions
-    /// TODO: we definetly don't need this here
+    /// TODO: we definitely don't need this here
     pub(crate) extensions: Mutex<Option<HashMap<u8, Box<dyn ExtensionHandler>>>>,
 }
 

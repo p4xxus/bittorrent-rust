@@ -46,13 +46,13 @@ pub(in crate::peer_manager) struct PieceSelector {
 
 impl PieceSelector {
     pub(in crate::peer_manager) fn new(have: Vec<bool>) -> Self {
-        let n_piceces = have.len();
+        let n_pieces = have.len();
         Self {
-            piece_rarity: vec![0; n_piceces],
-            priority_queue: BinaryHeap::with_capacity(n_piceces),
+            piece_rarity: vec![0; n_pieces],
+            priority_queue: BinaryHeap::with_capacity(n_pieces),
             have,
             peer_bitfields: HashMap::new(),
-            pieces_in_flight: vec![false; n_piceces],
+            pieces_in_flight: vec![false; n_pieces],
         }
     }
 
@@ -68,7 +68,7 @@ impl PieceSelector {
 
         // update peer bitfields to be correct len
         for peer_bitfields in self.peer_bitfields.values_mut() {
-            peer_bitfields.drain(n_pieces..);
+            peer_bitfields.resize(n_pieces, false);
         }
 
         // recalculate piece_rarity
@@ -95,7 +95,16 @@ impl PieceSelector {
     }
 
     pub(in crate::peer_manager) fn add_peer(&mut self, id: PeerId) {
-        if let Some(old) = self.peer_bitfields.insert(id, Vec::new()) {
+        let n_pieces = (!self.have.is_empty())
+            .then(|| self.have.len())
+            .unwrap_or_else(|| {
+                self.peer_bitfields
+                    .values()
+                    .next()
+                    .map(|bitfield| bitfield.len())
+                    .unwrap_or(0)
+            });
+        if let Some(old) = self.peer_bitfields.insert(id, vec![false; n_pieces]) {
             // this shouldn't happen, but if it does we're safe
             self.peer_bitfields.insert(id, old);
         };
@@ -114,6 +123,12 @@ impl PieceSelector {
         if bitfield.is_empty() {
             return;
         }
+        // this might be the first bitfield we get and so we must update the lengths of the other bitfields
+        self.peer_bitfields
+            .values_mut()
+            .filter(|bitfield| bitfield.is_empty())
+            .for_each(|other_bitfield| other_bitfield.resize(bitfield.len(), false));
+
         if let Some(peer_bitfield) = self.peer_bitfields.get_mut(id) {
             *peer_bitfield = bitfield.clone();
             self.update_prio_queue(bitfield, true);
@@ -186,9 +201,7 @@ impl PieceSelector {
     }
 
     pub(in crate::peer_manager) fn get_peer_has(&self, id: &PeerId) -> Option<&Vec<bool>> {
-        self.peer_bitfields
-            .get(id)
-            .and_then(|b| (!b.is_empty()).then(|| b))
+        self.peer_bitfields.get(id)
     }
 
     pub(in crate::peer_manager) fn get_have(&self) -> &Vec<bool> {
