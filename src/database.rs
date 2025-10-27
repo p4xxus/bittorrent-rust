@@ -12,7 +12,7 @@ use surrealdb::opt::PatchOp;
 use surrealdb::engine::local::RocksDb;
 use thiserror::Error;
 
-use crate::torrent::{InfoHash, Metainfo, Torrent};
+use crate::torrent::{Metainfo, Torrent};
 
 /// the actual data stored in the DB
 /// torrent path is also the key
@@ -46,21 +46,19 @@ struct Record {
     id: RecordId,
 }
 #[derive(Debug, Clone)]
-pub(crate) struct DBConnection {
+pub(crate) struct SurrealDbConn {
     pub(crate) db: Surreal<Db>,
-    pub(crate) info_hash_hex: String,
 }
 
-impl DBConnection {
-    pub(crate) async fn new(info_hash: InfoHash) -> Result<DBConnection, DBError> {
-        let info_hash_hex = hex::encode(info_hash.0);
-        let db = Surreal::new::<RocksDb>("files").await?;
+impl SurrealDbConn {
+    pub(crate) async fn new(db_name: &str) -> Result<SurrealDbConn, DBError> {
+        let db = Surreal::new::<RocksDb>(db_name).await?;
         db.use_ns("files_ns").use_db("files_db").await?;
-        Ok(Self { db, info_hash_hex })
+        Ok(Self { db })
     }
 
-    pub(crate) async fn get_entry(&self) -> Result<Option<DBEntry>, DBError> {
-        let entry = self.db.select(("files", &self.info_hash_hex)).await?;
+    pub(crate) async fn get_entry(&self, info_hash_hex: &str) -> Result<Option<DBEntry>, DBError> {
+        let entry = self.db.select(("files", info_hash_hex)).await?;
         Ok(entry)
     }
 
@@ -69,10 +67,11 @@ impl DBConnection {
         file_path: PathBuf,
         torrent: Torrent,
     ) -> Result<DBEntry, DBError> {
+        let info_hash_hex = hex::encode(torrent.info.info_hash().0);
         let file = DBEntry::from_new_file(file_path, torrent);
         let entry = self
             .db
-            .create::<Option<DBEntry>>(("files", &self.info_hash_hex))
+            .create::<Option<DBEntry>>(("files", &info_hash_hex))
             .content(file)
             .await?
             .expect("I'm really curious what the error is here.");
@@ -80,12 +79,13 @@ impl DBConnection {
     }
 
     pub(super) async fn update_bitfields(
-        &mut self,
+        &self,
+        info_hash_hex: &str,
         new_bitfield: Vec<bool>,
     ) -> Result<(), DBError> {
         let updated: Option<DBEntry> = self
             .db
-            .update(("files", &self.info_hash_hex))
+            .update(("files", info_hash_hex))
             .patch(PatchOp::replace("/bitfield", new_bitfield))
             .await?;
 

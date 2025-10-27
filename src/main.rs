@@ -1,13 +1,14 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_bittorrent::magnet_links::MagnetLink;
+use codecrafters_bittorrent::client::Client;
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
-use codecrafters_bittorrent::{Peer, PeerManager, Torrent, TrackerRequest};
+use codecrafters_bittorrent::{Peer, Torrent, TrackerRequest};
 use std::error::Error;
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
+/// we only need this for custom request like to the tracker
 const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
 const PEER_PORT: u16 = 6881;
 
@@ -69,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // println!("Tracker URL: {}", torrent.announce);
             // println!("Length: {}", torrent.get_length());
             let info_hash = torrent.info.info_hash();
-            println!("Info Hash: {}", hex::encode(info_hash.0));
+            println!("Info Hash: {}", hex::encode(*info_hash));
             println!("Piece Length: {}", torrent.info.piece_length);
             // print everything except the piece hashes
             println!("{:#?}", torrent.info.files);
@@ -140,84 +141,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             torrent: torrent_path,
         } => {
-            let (peer_manager_tx, peer_manager_rx) = mpsc::channel(64);
-
-            let torrent = Torrent::read_from_file(torrent_path)?;
-            let peer_manager =
-                PeerManager::init_from_torrent(peer_manager_rx, output.clone(), torrent.clone())
-                    .await?;
-
-            let info_hash = torrent.info.info_hash();
-            let tracker =
-                TrackerRequest::new(&info_hash, PEER_ID, PEER_PORT, torrent.info.get_length());
-            let response = tracker.get_response(vec![torrent.announce]).await?;
-
-            tokio::spawn(async move {
-                let _ = peer_manager.run().await;
-            });
-
-            for &addr in response.peers.0.iter() {
-                let peer_manager_tx = peer_manager_tx.clone();
-                tokio::spawn(async move {
-                    let peer = Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx)
-                        .await
-                        .context("initializing peer")
-                        .unwrap();
-                    peer.run().await.unwrap();
-                });
-            }
-
-            // peer listener
-            let addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, PEER_PORT);
-            let listener = tokio::net::TcpListener::bind(addr).await?;
-            loop {
-                let connection = listener.accept().await;
-                let Ok((stream, _addr)) = connection else {
-                    continue;
-                };
-                let peer =
-                    Peer::connect_from_stream(stream, info_hash, *PEER_ID, peer_manager_tx.clone())
-                        .await
-                        .context("initializing incoming peer connection")
-                        .unwrap();
-                peer.run().await.unwrap();
-            }
+            let mut client = Client::new().await?;
+            client
+                .download_torrent(PEER_PORT, torrent_path, output.clone())
+                .await?;
         }
         DecodeMetadataType::DownloadMagnet {
             output,
             magnet_link,
         } => {
-            let (peer_manager_tx, rx) = mpsc::channel(64);
-            let magnet_link = MagnetLink::from_url(magnet_link)?;
-            let peer_manager =
-                PeerManager::init_from_magnet(rx, output.clone(), magnet_link.clone()).await?;
-
-            // using 999 as a placeholder since we don't know the length yet
-            let tracker = TrackerRequest::new(&magnet_link.info_hash, PEER_ID, PEER_PORT, 999);
-            let response = tracker
-                .get_response(magnet_link.get_announce_urls()?)
+            let mut client = Client::new().await?;
+            client
+                .download_magnet(PEER_PORT, magnet_link, output.clone())
                 .await?;
-
-            tokio::spawn(async move {
-                peer_manager.run().await.unwrap();
-            });
-
-            for &addr in response.peers.0.iter() {
-                let peer_manager_tx = peer_manager_tx.clone();
-                tokio::spawn(async move {
-                    let peer = Peer::connect_from_addr(
-                        addr,
-                        magnet_link.info_hash,
-                        *PEER_ID,
-                        peer_manager_tx,
-                    )
-                    .await
-                    .context("initializing peer")
-                    .unwrap();
-                    peer.run().await.unwrap();
-                });
-            }
-            std::thread::sleep(std::time::Duration::MAX);
         }
     }
 

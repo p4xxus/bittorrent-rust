@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ops::Deref, path::PathBuf};
 
 pub use hashes::Hashes;
 use serde::{Deserialize, Serialize};
@@ -7,6 +7,20 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InfoHash(pub [u8; 20]);
+
+impl Deref for InfoHash {
+    type Target = [u8; 20];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl InfoHash {
+    pub(crate) fn as_hex(&self) -> String {
+        hex::encode(**self)
+    }
+}
 
 mod ser_info_hash {
     use serde::{Serialize, Serializer};

@@ -43,10 +43,7 @@ impl<'a> TrackerRequest<'a> {
     }
     fn to_url_encoded(&self) -> String {
         let mut url_encoded = String::new();
-        url_encoded.push_str(&format!(
-            "info_hash={}",
-            escape_bytes_url(&self.info_hash.0)
-        ));
+        url_encoded.push_str(&format!("info_hash={}", escape_bytes_url(&self.info_hash)));
         url_encoded.push_str(&format!("&peer_id={}", escape_bytes_url(self.peer_id)));
         url_encoded.push_str(&format!("&port={}", self.port));
         url_encoded.push_str(&format!("&uploaded={}", self.uploaded));

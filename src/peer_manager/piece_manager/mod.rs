@@ -3,12 +3,8 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    Torrent,
-    database::DBConnection,
-    peer_manager::{
-        PieceState, error::PeerManagerError, piece_manager::req_preparer::DownloadQueue,
-    },
+use crate::peer_manager::{
+    PieceState, error::PeerManagerError, piece_manager::req_preparer::DownloadQueue,
 };
 mod file_manager;
 pub(super) mod piece_selector;
@@ -18,51 +14,33 @@ mod req_preparer;
 pub(super) struct PieceManager {
     /// if it's None, we are finished
     download_queue: DownloadQueue,
-    db_conn: DBConnection,
     /// the output file
     file: File,
+    info_hash_hex: String,
 }
 
 impl PieceManager {
-    /// returns itself and the bitfield of pieces we have
-    pub(super) async fn build(
-        db_conn: DBConnection,
-        file_path: Option<PathBuf>,
-        torrent: &Torrent,
-    ) -> Result<(Self, Vec<bool>), PeerManagerError> {
-        let file_path = file_path.unwrap_or(torrent.info.name.clone().into());
-        let file_entry = db_conn.get_entry().await?;
-        let file_existed = file_entry.is_some();
+    /// we need the info_hash_hex for caching
+    pub(super) fn build(
+        file_path: PathBuf,
+        info_hash_hex: String,
+        exists: bool,
+    ) -> Result<Self, PeerManagerError> {
+        let file = get_file(file_path, exists)?;
+        let download_queue = DownloadQueue::new();
 
-        let file_entry = if let Some(file_entry) = file_entry {
-            file_entry
-        } else {
-            db_conn.set_entry(file_path, torrent.clone()).await?
-        };
-
-        let file = OpenOptions::new()
-            .create(!file_existed)
-            .append(true)
-            .truncate(false)
-            .open(&file_entry.file)
-            .map_err(|error| PeerManagerError::OpenError {
-                path: file_entry.file.to_path_buf(),
-                error,
-            })?;
-
-        let download_queue = if file_entry.is_finished() {
-            todo!("We are finished and now seeding which isn't implemented yet.")
-        } else {
-            DownloadQueue::new()
-        };
-
-        Ok((
-            PieceManager {
-                download_queue,
-                db_conn,
-                file,
-            },
-            file_entry.bitfield.to_vec(),
-        ))
+        Ok(Self {
+            download_queue,
+            file,
+            info_hash_hex,
+        })
     }
+}
+fn get_file(path: PathBuf, exists: bool) -> Result<File, PeerManagerError> {
+    OpenOptions::new()
+        .create(exists)
+        .append(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|error| PeerManagerError::OpenError { path, error })
 }
