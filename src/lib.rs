@@ -6,6 +6,8 @@ mod peer;
 mod peer_manager;
 mod tracker;
 
+pub mod client;
+
 pub use crate::core::torrent::Torrent;
 pub use core::torrent;
 pub use extensions::magnet_links;

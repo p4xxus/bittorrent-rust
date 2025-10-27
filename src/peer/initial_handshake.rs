@@ -24,7 +24,7 @@ impl Handshake {
             length: 19,
             protocol: *b"BitTorrent protocol",
             reserved,
-            info_hash: info_hash.0,
+            info_hash: *info_hash,
             peer_id,
         }
     }
@@ -61,6 +61,8 @@ impl Handshake {
         assert_eq!(len, HANDSHAKE_LEN);
         assert_eq!(handshake_recv.length, 19);
         assert_eq!(handshake_recv.protocol, *b"BitTorrent protocol");
+        // TODO: If this fails it means the peer needs some other file than we were trying to download
+        // essentially this is the point were we have to create a new PeerManager if we have this file
         assert_eq!(handshake_recv.info_hash, self.info_hash);
         Ok(handshake_recv)
     }

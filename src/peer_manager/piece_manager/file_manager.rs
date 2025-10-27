@@ -1,4 +1,4 @@
-use std::os::unix::fs::FileExt;
+use std::{os::unix::fs::FileExt, sync::Arc};
 
 use bytes::BytesMut;
 use sha1::{Digest, Sha1};
@@ -6,6 +6,7 @@ use sha1::{Digest, Sha1};
 use super::PieceState;
 use crate::{
     BLOCK_MAX,
+    database::SurrealDbConn,
     messages::payloads::{RequestPiecePayload, ResponsePiecePayload},
     peer_manager::{
         BlockState, PieceManager, PieceSelector, error::PeerManagerError,
@@ -23,9 +24,10 @@ impl PieceManager {
         piece_selector: &mut PieceSelector,
         block: ResponsePiecePayload,
         metainfo: &Metainfo,
+        db_conn: &Arc<SurrealDbConn>,
     ) -> Result<Option<u32>, PeerManagerError> {
         if let Some(piece_state) = self.download_queue.update_piece_state(block) {
-            self.handle_piece(piece_selector, &piece_state, metainfo)
+            self.handle_piece(piece_selector, &piece_state, metainfo, Arc::clone(&db_conn))
                 .await?;
             Ok(Some(piece_state.piece_i))
         } else {
@@ -40,6 +42,7 @@ impl PieceManager {
         piece_selector: &mut PieceSelector,
         piece_state: &PieceState,
         metainfo: &Metainfo,
+        db_conn: Arc<SurrealDbConn>,
     ) -> Result<(), PeerManagerError> {
         let hashs_match = piece_state.check_hash(metainfo);
         if !hashs_match {
@@ -52,7 +55,10 @@ impl PieceManager {
         let mut new_bitfield = piece_selector.get_have().clone();
         let piece_i = piece_state.piece_i as usize;
         new_bitfield[piece_i] = true;
-        self.db_conn.update_bitfields(new_bitfield).await?;
+        // todo!();
+        db_conn
+            .update_bitfields(&self.info_hash_hex, new_bitfield)
+            .await?;
         piece_selector.have[piece_i] = true;
 
         Ok(())

@@ -20,7 +20,7 @@ const TIMEOUT_METADATA_REQ: Duration = Duration::from_secs(5);
 pub(crate) struct MetadataPieceManager {
     queue: Vec<BlockState>,
     bytes: BytesMut,
-    pub info_hash: InfoHash,
+    info_hash: InfoHash,
 }
 
 impl MetadataPieceManager {
@@ -90,7 +90,7 @@ impl MetadataPieceManager {
             hasher.update(&self.bytes);
             let sha1: [u8; 20] = hasher.finalize().into();
 
-            if sha1 == self.info_hash.0 {
+            if sha1 == *self.info_hash {
                 return true;
             } else {
                 self.queue = vec![BlockState::None; self.queue.len()];
@@ -101,6 +101,10 @@ impl MetadataPieceManager {
 
     pub(crate) fn get_metadata(&self) -> Result<Metainfo, serde_bencode::Error> {
         serde_bencode::from_bytes(&self.bytes)
+    }
+
+    pub(crate) fn get_info_hash(&self) -> InfoHash {
+        self.info_hash
     }
 }
 

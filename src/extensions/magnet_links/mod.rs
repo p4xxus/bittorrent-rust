@@ -35,7 +35,7 @@ impl FromStr for InfoHash {
 #[derive(Debug, Clone)]
 pub struct MagnetLink {
     pub info_hash: InfoHash,
-    file_name: Option<String>,
+    pub file_name: Option<String>,
     trackers: Vec<url::Url>,
     peer_addrs: Vec<SocketAddrV4>,
 }
@@ -50,8 +50,8 @@ impl MagnetLink {
         Self::from_query_pairs(url.query_pairs())
     }
 
-    pub fn get_announce_urls(&self) -> Result<Vec<url::Url>, MagnetLinkError> {
-        Ok(self.trackers.clone())
+    pub fn get_announce_urls(&self) -> Vec<url::Url> {
+        self.trackers.clone()
     }
 
     fn from_query_pairs(pairs: Parse) -> Result<Self, MagnetLinkError> {
