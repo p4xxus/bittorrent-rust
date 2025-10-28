@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     error::Error,
     io,
     net::{Ipv4Addr, SocketAddrV4},
@@ -18,19 +19,22 @@ use crate::{
     tracker::TrackerRequest,
 };
 
-const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
+pub(crate) const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
 
-const CHANNEL_SIZE: usize = 64;
 const DATABASE_NAME: &'static str = "files";
 
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
+    peer_managers: HashMap<InfoHash, PeerManager>,
 }
 
 impl Client {
     pub async fn new() -> Result<Self, Box<dyn Error>> {
         let db_conn = Arc::new(SurrealDbConn::new(DATABASE_NAME).await?);
-        Ok(Self { db_conn })
+        Ok(Self {
+            db_conn,
+            peer_managers: HashMap::new(),
+        })
     }
 
     pub async fn download_torrent(
@@ -63,8 +67,6 @@ impl Client {
         magnet_link: MagnetLink,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
-        let (peer_manager_tx, peer_manager_rx) = mpsc::channel(CHANNEL_SIZE);
-
         let info_hash = magnet_link.info_hash;
 
         // TODO: if we actually have the file there's no need for the 999 because we know the length
@@ -76,30 +78,27 @@ impl Client {
 
         let info_hash_hex = info_hash.as_hex();
         let peer_manager = match self.db_conn.get_entry(&info_hash_hex).await? {
-            Some(file_entry) => PeerManager::init_from_entry(
-                info_hash_hex,
-                peer_manager_rx,
-                Arc::clone(&self.db_conn),
-                file_entry,
-            )?,
-            None => PeerManager::init_from_magnet(
-                magnet_link,
-                peer_manager_rx,
-                Arc::clone(&self.db_conn),
-                output_path,
-            ),
+            Some(file_entry) => {
+                PeerManager::init_from_entry(info_hash_hex, Arc::clone(&self.db_conn), file_entry)?
+            }
+            None => {
+                PeerManager::init_from_magnet(magnet_link, Arc::clone(&self.db_conn), output_path)
+            }
         };
 
         tokio::spawn(async move {
             let _ = peer_manager.run().await;
         });
 
-        self.add_peers_to_manager(response.peers.0, info_hash, *PEER_ID, &peer_manager_tx)
-            .await;
+        // self.add_peers_to_manager(response.peers.0, info_hash, *PEER_ID, &peer_manager_tx)
+        //     .await;
 
-        self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
-            .await?;
+        // self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
+        //     .await?;
 
+        loop {
+            tokio::task::yield_now().await;
+        }
         println!("we're done");
 
         Ok(())
@@ -111,8 +110,6 @@ impl Client {
         torrent: Torrent,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
-        let (peer_manager_tx, peer_manager_rx) = mpsc::channel(CHANNEL_SIZE);
-
         let info_hash = torrent.info.info_hash();
 
         let tracker =
@@ -131,22 +128,18 @@ impl Client {
                     .await?
             }
         };
-        let peer_manager = PeerManager::init_from_entry(
-            info_hash_hex,
-            peer_manager_rx,
-            Arc::clone(&self.db_conn),
-            file_entry,
-        )?;
+        let peer_manager =
+            PeerManager::init_from_entry(info_hash_hex, Arc::clone(&self.db_conn), file_entry)?;
 
         tokio::spawn(async move {
             let _ = peer_manager.run().await;
         });
 
-        self.add_peers_to_manager(response.peers.0, info_hash, *PEER_ID, &peer_manager_tx)
-            .await;
+        // self.add_peers_to_manager(response.peers.0, info_hash, *PEER_ID, &peer_manager_tx)
+        //     .await;
 
-        self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
-            .await?;
+        // self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
+        //     .await?;
 
         println!("we're done");
 
