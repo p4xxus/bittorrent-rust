@@ -38,7 +38,7 @@ impl PieceManager {
 }
 fn get_file(path: PathBuf, exists: bool) -> Result<File, PeerManagerError> {
     OpenOptions::new()
-        .create(exists)
+        .create(!exists)
         .append(true)
         .truncate(false)
         .open(&path)

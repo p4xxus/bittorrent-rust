@@ -105,7 +105,7 @@ impl PeerManager {
                                 if metadata_piece_manager.check_finished() {
                                     let file_path = file_path.clone();
                                     let metainfo = metadata_piece_manager
-                                    .get_metadata()
+                                        .get_metadata()
                                         .expect("This shouldn't fail since we checked that the hashes match.");
                                     self.transition_downloading(metainfo, file_path).await?;
                                 }

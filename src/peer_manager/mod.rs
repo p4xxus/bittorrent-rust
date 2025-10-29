@@ -223,7 +223,7 @@ impl PeerManager {
 
     async fn req_tracker(&self) -> Result<(), TrackerRequestError> {
         let file_length = match &self.torrent_state {
-            TorrentState::WaitingForMetadata { file_path, .. } => 999, // this is just an arbitrary value really
+            TorrentState::WaitingForMetadata { .. } => 999, // this is just an arbitrary value really
             TorrentState::Downloading { metainfo, .. } => metainfo.get_length(),
             TorrentState::Seeding { metainfo } => metainfo.get_length(),
         };
