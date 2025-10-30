@@ -15,8 +15,7 @@ use crate::{
     magnet_links::MagnetLink,
     peer::Peer,
     peer_manager::{PeerManager, ReqMsgFromPeer},
-    torrent::{InfoHash, Torrent},
-    tracker::TrackerRequest,
+    torrent::{AnnounceList, InfoHash, Torrent},
 };
 
 pub(crate) const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
@@ -69,13 +68,6 @@ impl Client {
     ) -> Result<(), Box<dyn Error>> {
         let info_hash = magnet_link.info_hash;
 
-        // TODO: if we actually have the file there's no need for the 999 because we know the length
-        // the 999 is because we don't know the size of the file yet
-        let tracker = TrackerRequest::new(&info_hash, PEER_ID, peer_port, 999);
-        let response = tracker
-            .get_response(magnet_link.get_announce_urls())
-            .await?;
-
         let info_hash_hex = info_hash.as_hex();
         let peer_manager = match self.db_conn.get_entry(&info_hash_hex).await? {
             Some(file_entry) => {
@@ -112,18 +104,18 @@ impl Client {
     ) -> Result<(), Box<dyn Error>> {
         let info_hash = torrent.info.info_hash();
 
-        let tracker =
-            TrackerRequest::new(&info_hash, PEER_ID, peer_port, torrent.info.get_length());
-        let response = tracker.get_response(vec![torrent.announce.clone()]).await?;
-
         let info_hash_hex = info_hash.as_hex();
         let file_entry = match self.db_conn.get_entry(&info_hash_hex).await? {
             Some(file_entry) => file_entry,
             None => {
+                let announce_list = torrent
+                    .announce_list
+                    .unwrap_or_else(|| AnnounceList::from_single_announce(torrent.announce));
                 self.db_conn
                     .set_entry(
                         output_path.unwrap_or(torrent.info.name.clone().into()),
-                        torrent,
+                        torrent.info,
+                        announce_list,
                     )
                     .await?
             }
@@ -141,29 +133,12 @@ impl Client {
         // self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
         //     .await?;
 
+        loop {
+            tokio::task::yield_now().await;
+        }
         println!("we're done");
 
         Ok(())
-    }
-
-    // TODO: this theoretically doesn't need self right now but ideally we want to store multiple peer_managers later in Self
-    async fn add_peers_to_manager(
-        &self,
-        addresses: impl IntoIterator<Item = SocketAddrV4>,
-        info_hash: InfoHash,
-        peer_id: [u8; 20],
-        peer_manager_tx: &mpsc::Sender<ReqMsgFromPeer>,
-    ) {
-        for addr in addresses {
-            let peer_manager_tx = peer_manager_tx.clone();
-            tokio::spawn(async move {
-                let peer = Peer::connect_from_addr(addr, info_hash, peer_id, peer_manager_tx)
-                    .await
-                    .context("initializing peer")
-                    .unwrap();
-                peer.run().await.unwrap();
-            });
-        }
     }
 
     // TODO: not sure if this needs self in the future at all

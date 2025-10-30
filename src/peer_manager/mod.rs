@@ -1,14 +1,12 @@
 //! a peer announces to us that he exists via the mpsc
 //! We create peer with our current have bitfield which he can send to new connections and we send
-use std::{
-    collections::HashMap, fmt::Debug, net::SocketAddrV4, path::PathBuf, sync::Arc, time::Duration,
-};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc, time::Duration};
 
 use bytes::{Bytes, BytesMut};
 use tokio::sync::mpsc;
 
 use crate::{
-    Peer, TrackerRequest,
+    TrackerRequest,
     client::PEER_ID,
     database::{DBEntry, SurrealDbConn},
     extensions::{
@@ -19,14 +17,16 @@ use crate::{
     peer::conn::PeerState,
     peer_manager::{
         error::PeerManagerError,
+        peer_fetcher::PeerFetcher,
         piece_manager::{PieceManager, piece_selector::PieceSelector},
     },
-    torrent::{InfoHash, Metainfo},
+    torrent::{AnnounceList, InfoHash, Metainfo},
     tracker::TrackerRequestError,
 };
 
 pub mod error;
 mod event_loop;
+pub(super) mod peer_fetcher;
 mod piece_manager;
 
 const CHANNEL_SIZE: usize = 64;
@@ -41,9 +41,8 @@ const TIMEOUT_FOR_REQ: Duration = Duration::from_secs(10);
 pub struct PeerManager {
     torrent_state: TorrentState,
     db_conn: Arc<SurrealDbConn>,
-    tx: mpsc::Sender<ReqMsgFromPeer>,
+    peer_fetcher: PeerFetcher,
     rx: mpsc::Receiver<ReqMsgFromPeer>,
-    announce_urls: Vec<url::Url>,
     peers: HashMap<PeerId, PeerConn>,
     piece_selector: PieceSelector,
 }
@@ -171,8 +170,7 @@ impl PeerManager {
         db_conn: Arc<SurrealDbConn>,
         file_entry: DBEntry,
     ) -> Result<Self, PeerManagerError> {
-        let piece_manager =
-            PieceManager::build(file_entry.file.to_path_buf(), info_hash_hex, true)?;
+        let piece_manager = PieceManager::build(file_entry.file.to_path_buf(), info_hash_hex)?;
         let torrent_state = TorrentState::Downloading {
             metainfo: file_entry.torrent_info,
             piece_manager,
@@ -181,7 +179,7 @@ impl PeerManager {
         Ok(Self::new(
             torrent_state,
             db_conn,
-            vec![file_entry.announce],
+            file_entry.announce_list,
             PieceSelector::new(file_entry.bitfield.to_vec()),
         ))
     }
@@ -198,30 +196,31 @@ impl PeerManager {
         Self::new(
             torrent_state,
             db_conn,
-            magnet_link.get_announce_urls(),
+            AnnounceList::from_single_tier_list(magnet_link.get_announce_urls()),
             PieceSelector::new(vec![]),
         )
     }
 
+    // todo: make an option struct for like port and shit
     fn new(
         torrent_state: TorrentState,
         db_conn: Arc<SurrealDbConn>,
-        announce_urls: Vec<url::Url>,
+        announce_list: AnnounceList,
         piece_selector: PieceSelector,
     ) -> Self {
         let (tx, rx) = mpsc::channel(CHANNEL_SIZE);
+        let peer_fetcher = PeerFetcher::new(tx, announce_list);
         Self {
             torrent_state,
             rx,
-            tx,
+            peer_fetcher,
             db_conn,
-            announce_urls,
             peers: HashMap::new(),
             piece_selector,
         }
     }
 
-    async fn req_tracker(&self) -> Result<(), TrackerRequestError> {
+    async fn req_tracker(&mut self) -> Result<(), TrackerRequestError> {
         let file_length = match &self.torrent_state {
             TorrentState::WaitingForMetadata { .. } => 999, // this is just an arbitrary value really
             TorrentState::Downloading { metainfo, .. } => metainfo.get_length(),
@@ -230,24 +229,21 @@ impl PeerManager {
         let info_hash = self.get_info_hash();
 
         // TODO: port
-        let tracker = TrackerRequest::new(&info_hash, PEER_ID, 6882, file_length);
-        let res = tracker.get_response(self.announce_urls.clone()).await?;
+        let tracker_request = TrackerRequest::new(&info_hash, PEER_ID, 6882, file_length);
 
-        self.add_peers_to_manager(res.peers.0).await;
-        Ok(())
-    }
-
-    async fn add_peers_to_manager(&self, addresses: impl IntoIterator<Item = SocketAddrV4>) {
-        let info_hash = self.get_info_hash();
-        for addr in addresses {
-            let peer_manager_tx = self.tx.clone();
-            tokio::spawn(async move {
-                let peer = Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx)
-                    .await
-                    .expect("Failed to connect to peer.");
-                peer.run().await.unwrap();
-            });
+        if let Some(res) = self
+            .peer_fetcher
+            .get_tracker_response(tracker_request)
+            .await
+        {
+            self.peer_fetcher
+                .add_peers_to_manager(info_hash, res.peers.0)
+                .await;
+        } else {
+            panic!("Could not get a valid response from the tracker.");
         }
+
+        Ok(())
     }
 
     // TODO: we might want to save the InfoHash in the PeerManager itself

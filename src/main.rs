@@ -75,14 +75,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // print everything except the piece hashes
             println!("{:#?}", torrent.info.files);
             println!("{:#?}", torrent.info.name);
-            println!("{:#?}", torrent.info.other);
+            // println!("{:#?}", torrent.info.other);
         }
         DecodeMetadataType::Peers { torrent } => {
             let torrent = Torrent::read_from_file(torrent)?;
             let info_hash = torrent.info.info_hash();
             let tracker_req =
                 TrackerRequest::new(&info_hash, PEER_ID, PEER_PORT, torrent.info.get_length());
-            let response = tracker_req.get_response(vec![torrent.announce]).await?;
+            let (_, response) = tracker_req
+                .get_first_response_in_list(vec![torrent.announce])
+                .await
+                .unwrap();
             for peer in response.peers.0 {
                 println!("{peer:?}");
             }

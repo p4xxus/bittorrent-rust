@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    PeerManager, Torrent,
+    PeerManager,
     extensions::{ExtensionMessage, ExtensionType},
     magnet_links::metadata_piece_manager::MetadataPieceManager,
     messages::payloads::BitfieldPayload,
@@ -145,18 +145,17 @@ impl PeerManager {
     ) -> Result<(), PeerManagerError> {
         let file_path = file_path.unwrap_or(metainfo.name.clone().into());
 
-        let torrent = Torrent {
-            announce: self
-                .announce_urls
-                .first()
-                .expect("If there's none, the parsing would have failed long ago.")
-                .clone(),
-            info: metainfo,
-        };
-        let db_entry = self.db_conn.set_entry(file_path.clone(), torrent).await?;
+        let db_entry = self
+            .db_conn
+            .set_entry(
+                file_path.clone(),
+                metainfo,
+                self.peer_fetcher.announce_list.clone(),
+            )
+            .await?;
 
         let piece_manager =
-            PieceManager::build(file_path, db_entry.torrent_info.info_hash().as_hex(), false)?;
+            PieceManager::build(file_path, db_entry.torrent_info.info_hash().as_hex())?;
         self.piece_selector
             .update_from_self_have(db_entry.bitfield.to_vec());
         self.torrent_state = TorrentState::Downloading {

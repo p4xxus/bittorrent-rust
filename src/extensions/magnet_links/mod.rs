@@ -66,14 +66,7 @@ impl MagnetLink {
                     info_hash = Some(InfoHash::from_str(&value)?);
                 }
                 "tr" => {
-                    if let Ok(mut url) = url::Url::parse(&value) {
-                        // current workaround for some trackers that only announce their udp addr but also have support for http
-                        if url.scheme() == "udp" {
-                            url.set_path("/announce");
-                            let url_str = &url.as_str()[3..];
-                            url = url::Url::parse(&format!("http{url_str}")).expect("is valid");
-                            // the reason I do this is because I cannot set the scheme via .set_scheme() from udp to http
-                        }
+                    if let Ok(url) = url::Url::parse(&value) {
                         trackers.push(url);
                     }
                 }
