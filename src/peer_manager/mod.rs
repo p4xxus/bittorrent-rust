@@ -42,7 +42,8 @@ pub struct PeerManager {
     torrent_state: TorrentState,
     db_conn: Arc<SurrealDbConn>,
     peer_fetcher: PeerFetcher,
-    rx: mpsc::Receiver<ReqMsgFromPeer>,
+    // again, this is an option since I need to construct first the tx with this struct and then the receiver stream
+    rx: Option<mpsc::Receiver<ReqMsgFromPeer>>,
     peers: HashMap<PeerId, PeerConn>,
     piece_selector: PieceSelector,
 }
@@ -82,9 +83,15 @@ pub enum ReqMessage {
 }
 
 /// A message sent by a local peer to this Manager
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReqMsgFromPeer {
     pub(crate) peer_id: [u8; 20],
     pub(crate) msg: ReqMessage,
+}
+#[derive(Debug, Clone, PartialEq)]
+enum PeerManagerReceiverStream {
+    PeerMessage(ReqMsgFromPeer),
+    SendTrackerUpdate,
 }
 
 // TODO Next-up:
@@ -210,9 +217,10 @@ impl PeerManager {
     ) -> Self {
         let (tx, rx) = mpsc::channel(CHANNEL_SIZE);
         let peer_fetcher = PeerFetcher::new(tx, announce_list);
+
         Self {
             torrent_state,
-            rx,
+            rx: Some(rx),
             peer_fetcher,
             db_conn,
             peers: HashMap::new(),
@@ -239,6 +247,7 @@ impl PeerManager {
             self.peer_fetcher
                 .add_peers_to_manager(info_hash, res.peers.0)
                 .await;
+            self.peer_fetcher.set_tracker_req_interval(res.interval);
         } else {
             panic!("Could not get a valid response from the tracker.");
         }

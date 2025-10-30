@@ -71,22 +71,15 @@ impl<'a> TrackerRequest<'a> {
         let mut announce_urls = announce_urls
             .into_iter()
             .map(|mut url| {
-                // current workaround for some trackers that only announce their udp addr but also have support for http
-                if url.scheme() == "udp" {
-                    url.set_path("/announce");
-                    let url_str = &url.as_str()[3..];
-                    url = url::Url::parse(&format!("http{url_str}")).expect("is valid");
-                    // the reason I do this is because I cannot set the scheme via .set_scheme() from udp to http
-                }
                 url.set_query(Some(&query));
                 url
             })
             .enumerate();
 
-        while let Some((index, url)) = dbg!(announce_urls.next())
-            && let Ok(response) = dbg!(client.get(url).send().await)
-            && let Ok(bytes) = dbg!(response.bytes().await)
-            && let Ok(tracker_response) = dbg!(serde_bencode::from_bytes::<TrackerResponse>(&bytes))
+        while let Some((index, url)) = announce_urls.next()
+            && let Ok(response) = client.get(url).send().await
+            && let Ok(bytes) = response.bytes().await
+            && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
         {
             return Some((index, tracker_response));
         }

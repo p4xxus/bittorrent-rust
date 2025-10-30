@@ -1,4 +1,4 @@
-use std::net::SocketAddrV4;
+use std::{net::SocketAddrV4, time::Duration};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -9,16 +9,27 @@ use crate::{
     tracker::TrackerResponse,
 };
 
+const DEFAULT_TRACKER_TIMEOUT: Duration = Duration::from_secs(120);
+
 #[derive(Debug)]
 pub(super) struct PeerFetcher {
     tx: mpsc::Sender<ReqMsgFromPeer>,
     /// something like [ [ tracker1, tracker2 ], [ backup1 ] ]
     pub(super) announce_list: AnnounceList,
+    tracker_timeout: Duration,
 }
 
 impl PeerFetcher {
+    pub(in crate::peer_manager) fn get_tracker_req_interval(&self) -> Duration {
+        self.tracker_timeout
+    }
+
     pub(super) fn new(tx: mpsc::Sender<ReqMsgFromPeer>, announce_list: AnnounceList) -> Self {
-        Self { tx, announce_list }
+        Self {
+            tx,
+            announce_list,
+            tracker_timeout: DEFAULT_TRACKER_TIMEOUT,
+        }
     }
     pub(super) async fn add_peers_to_manager(
         &self,
@@ -52,5 +63,9 @@ impl PeerFetcher {
         }
 
         None
+    }
+
+    pub(super) fn set_tracker_req_interval(&mut self, timeout: usize) {
+        self.tracker_timeout = Duration::from_secs(timeout as u64);
     }
 }
