@@ -12,7 +12,8 @@ use surrealdb::opt::PatchOp;
 use surrealdb::engine::local::RocksDb;
 use thiserror::Error;
 
-use crate::torrent::{Metainfo, Torrent};
+use crate::torrent::AnnounceList;
+use crate::torrent::Metainfo;
 
 /// the actual data stored in the DB
 /// torrent path is also the key
@@ -21,17 +22,17 @@ pub(crate) struct DBEntry {
     pub(crate) bitfield: Cow<'static, [bool]>,
     pub(crate) file: Cow<'static, Path>,
     pub(crate) torrent_info: Metainfo,
-    pub(crate) announce: url::Url,
+    pub(crate) announce_list: AnnounceList,
 }
 
 impl DBEntry {
-    fn from_new_file(file_path: PathBuf, torrent: Torrent) -> Self {
-        let n_pieces = torrent.info.pieces.0.len();
+    fn from_new_file(file_path: PathBuf, info: Metainfo, announce_list: AnnounceList) -> Self {
+        let n_pieces = info.pieces.0.len();
         Self {
             bitfield: (vec![false; n_pieces]).into(),
             file: file_path.into(),
-            torrent_info: torrent.info,
-            announce: torrent.announce,
+            torrent_info: info,
+            announce_list,
         }
     }
 
@@ -65,10 +66,11 @@ impl SurrealDbConn {
     pub(crate) async fn set_entry(
         &self,
         file_path: PathBuf,
-        torrent: Torrent,
+        info: Metainfo,
+        announce_list: AnnounceList,
     ) -> Result<DBEntry, DBError> {
-        let info_hash_hex = hex::encode(torrent.info.info_hash().0);
-        let file = DBEntry::from_new_file(file_path, torrent);
+        let info_hash_hex = hex::encode(info.info_hash().0);
+        let file = DBEntry::from_new_file(file_path, info, announce_list);
         let entry = self
             .db
             .create::<Option<DBEntry>>(("files", &info_hash_hex))

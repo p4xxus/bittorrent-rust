@@ -95,15 +95,17 @@ impl PieceSelector {
     }
 
     pub(in crate::peer_manager) fn add_peer(&mut self, id: PeerId) {
-        let n_pieces = (!self.have.is_empty())
-            .then(|| self.have.len())
-            .unwrap_or_else(|| {
+        let n_pieces = if !self.have.is_empty() {
+            self.have.len()
+        } else {
+            {
                 self.peer_bitfields
                     .values()
                     .next()
                     .map(|bitfield| bitfield.len())
                     .unwrap_or(0)
-            });
+            }
+        };
         if let Some(old) = self.peer_bitfields.insert(id, vec![false; n_pieces]) {
             // this shouldn't happen, but if it does we're safe
             self.peer_bitfields.insert(id, old);
@@ -159,9 +161,7 @@ impl PieceSelector {
     // - (if yes) is the piece already requested by any peer
     /// selects `count` amount of pieces from a peer so we can request them
     pub(super) fn select_pieces_for_peer(&mut self, id: &PeerId, count: usize) -> Option<Vec<u32>> {
-        let Some(bitfield) = self.peer_bitfields.get(id) else {
-            return None;
-        };
+        let bitfield = self.peer_bitfields.get(id)?;
         let mut queue = Vec::with_capacity(count);
         while queue.len() <= count
             && let Some(Reverse((count, piece_i))) = self.priority_queue.pop()

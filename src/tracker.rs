@@ -25,25 +25,20 @@ pub struct TrackerRequest<'a> {
 }
 
 impl<'a> TrackerRequest<'a> {
-    pub fn new(
-        info_hash: &'a InfoHash,
-        peer_id: &'a [u8; 20],
-        port: u16,
-        file_length: u32,
-    ) -> Self {
+    pub fn new(info_hash: &'a InfoHash, peer_id: &'a [u8; 20], port: u16, left: u32) -> Self {
         Self {
             info_hash,
             peer_id,
             port,
             uploaded: 0,
             downloaded: 0,
-            left: file_length,
+            left,
             compact: 1, // TODO
         }
     }
     fn to_url_encoded(&self) -> String {
         let mut url_encoded = String::new();
-        url_encoded.push_str(&format!("info_hash={}", escape_bytes_url(&self.info_hash)));
+        url_encoded.push_str(&format!("info_hash={}", escape_bytes_url(self.info_hash)));
         url_encoded.push_str(&format!("&peer_id={}", escape_bytes_url(self.peer_id)));
         url_encoded.push_str(&format!("&port={}", self.port));
         url_encoded.push_str(&format!("&uploaded={}", self.uploaded));
@@ -53,34 +48,39 @@ impl<'a> TrackerRequest<'a> {
         url_encoded
     }
 
-    pub async fn get_response(
+    /// makes sequential requests to the urls passed in
+    /// returns the response with the corresponding index
+    ///
+    /// note that the sequential comes from the BEP 12, I think its that way so we don't overload the trackers
+    pub async fn get_first_response_in_list(
         &self,
         announce_urls: impl IntoIterator<Item = url::Url>,
-    ) -> Result<TrackerResponse, TrackerRequestError> {
-        let mut request_list = Vec::new();
-        let mut url_list = Vec::new();
-
+    ) -> Option<(usize, TrackerResponse)> {
         let client = reqwest::Client::builder()
         .user_agent(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:142.0) Gecko/20100101 Firefox/142.0",
         )
-        .build()?;
-        for mut url in announce_urls {
-            url.set_query(Some(&self.to_url_encoded()));
-            url_list.push(url.clone());
-            request_list.push(client.get(url).send());
-        }
-        let (response, _rem) = select_ok(request_list).await?;
-        let url = response.url().clone();
-        let response_bytes = Bytes::copy_from_slice(&response.bytes().await?);
+        .build().ok()?;
 
-        serde_bencode::from_bytes::<TrackerResponse>(&response_bytes).map_err(|des_err| {
-            TrackerRequestError::InvalidResponse {
-                error: des_err,
-                response: response_bytes,
-                url: url.to_string(),
+        let query = self.to_url_encoded();
+        let announce_urls = announce_urls
+            .into_iter()
+            .map(|mut url| {
+                url.set_query(Some(&query));
+                url
+            })
+            .enumerate();
+
+        for (index, url) in announce_urls {
+            if let Ok(response) = client.get(url).send().await
+                && let Ok(bytes) = response.bytes().await
+                && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
+            {
+                return Some((index, tracker_response));
             }
-        })
+        }
+
+        None
     }
 }
 

@@ -1,11 +1,12 @@
-use std::{ops::Deref, path::PathBuf};
+use std::{fmt::Display, ops::Deref, path::PathBuf};
 
 pub use hashes::Hashes;
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub struct InfoHash(pub [u8; 20]);
 
 impl Deref for InfoHash {
@@ -13,6 +14,13 @@ impl Deref for InfoHash {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Display for InfoHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = self.iter().map(u8::to_string).collect::<String>();
+        f.write_str(&str)
     }
 }
 
@@ -100,6 +108,8 @@ pub struct Torrent {
     pub announce: url::Url,
     /// This maps to a dictionary.
     pub info: Metainfo,
+    #[serde(rename = "announce-list")]
+    pub announce_list: Option<AnnounceList>,
 }
 
 impl Torrent {
@@ -131,8 +141,8 @@ pub struct Metainfo {
     length: Option<u32>,
     #[serde(flatten)]
     pub files: Key,
-    #[serde(flatten)]
-    pub other: serde_bencode::value::Value,
+    // #[serde(flatten)]
+    // pub other: serde_bencode::value::Value,
 }
 
 impl Metainfo {
@@ -177,6 +187,46 @@ pub struct File {
     /// A list of UTF-8 encoded strings corresponding to subdirectory names,
     /// the last of which is the actual file name (a zero length list is an error case).
     pub path: Vec<String>,
+}
+
+/// A list of tiers with multiple announce urls
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AnnounceList(pub(crate) Vec<Vec<url::Url>>);
+
+impl AnnounceList {
+    pub(crate) fn from_single_announce(announce: url::Url) -> Self {
+        Self::initiate(vec![vec![announce]])
+    }
+
+    pub(crate) fn from_single_tier_list(announces: Vec<url::Url>) -> Self {
+        Self::initiate(vec![announces])
+    }
+
+    fn initiate(mut list: Vec<Vec<url::Url>>) -> Self {
+        for tier in list.iter_mut() {
+            tier.iter_mut().for_each(|url| {
+                // current workaround for some trackers that only announce their udp addr but also have support for http
+                if url.scheme() == "udp" {
+                    url.set_path("/announce");
+                    let url_str = &url.as_str()[3..];
+                    *url = url::Url::parse(&format!("http{url_str}")).expect("is valid");
+                    // the reason I do this is because I cannot set the scheme via .set_scheme() from udp to http
+                }
+            });
+        }
+
+        let mut list = Self(list);
+        list.shuffle();
+
+        list
+    }
+
+    /// shuffles each list of urls in a tier, but keeps the order of the tiers itself
+    /// "URLs within each tier will be processed in a randomly chosen order" BEP12
+    fn shuffle(&mut self) {
+        let mut rng = rand::rng();
+        self.0.iter_mut().for_each(|tier| tier.shuffle(&mut rng));
+    }
 }
 
 #[derive(Error, Debug)]

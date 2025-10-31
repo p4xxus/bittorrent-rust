@@ -27,7 +27,7 @@ impl PieceManager {
         db_conn: &Arc<SurrealDbConn>,
     ) -> Result<Option<u32>, PeerManagerError> {
         if let Some(piece_state) = self.download_queue.update_piece_state(block) {
-            self.handle_piece(piece_selector, &piece_state, metainfo, Arc::clone(&db_conn))
+            self.handle_piece(piece_selector, &piece_state, metainfo, Arc::clone(db_conn))
                 .await?;
             Ok(Some(piece_state.piece_i))
         } else {

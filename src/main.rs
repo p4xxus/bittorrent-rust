@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_bittorrent::client::Client;
+use codecrafters_bittorrent::client::{Client, ClientOptions};
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
 use codecrafters_bittorrent::{Peer, Torrent, TrackerRequest};
 use std::error::Error;
@@ -75,14 +75,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // print everything except the piece hashes
             println!("{:#?}", torrent.info.files);
             println!("{:#?}", torrent.info.name);
-            println!("{:#?}", torrent.info.other);
+            // println!("{:#?}", torrent.info.other);
         }
         DecodeMetadataType::Peers { torrent } => {
             let torrent = Torrent::read_from_file(torrent)?;
             let info_hash = torrent.info.info_hash();
             let tracker_req =
                 TrackerRequest::new(&info_hash, PEER_ID, PEER_PORT, torrent.info.get_length());
-            let response = tracker_req.get_response(vec![torrent.announce]).await?;
+            let (_, response) = tracker_req
+                .get_first_response_in_list(vec![torrent.announce])
+                .await
+                .unwrap();
             for peer in response.peers.0 {
                 println!("{peer:?}");
             }
@@ -141,19 +144,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             torrent: torrent_path,
         } => {
-            let mut client = Client::new().await?;
-            client
-                .download_torrent(PEER_PORT, torrent_path, output.clone())
-                .await?;
+            let mut client = Client::new(ClientOptions::default()).await?;
+            client.add_torrent(torrent_path, output.clone()).await?;
+
+            std::thread::sleep(std::time::Duration::MAX);
         }
         DecodeMetadataType::DownloadMagnet {
             output,
             magnet_link,
         } => {
-            let mut client = Client::new().await?;
-            client
-                .download_magnet(PEER_PORT, magnet_link, output.clone())
-                .await?;
+            let client = Client::new(ClientOptions::default()).await?;
+            client.add_magnet(magnet_link, output.clone()).await?;
+
+            std::thread::sleep(std::time::Duration::MAX);
         }
     }
 

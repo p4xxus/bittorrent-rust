@@ -46,7 +46,7 @@ impl Peer {
                     ACTIVE_EXTENSIONS.get(payload.extension_id as usize - 1)
                     && let Some(extension) = extensions
                         .iter()
-                        .find_map(|(_id, e)| (e.get_ext_type() == *ext_type).then(|| e))
+                        .find_map(|(_id, e)| (e.get_ext_type() == *ext_type).then_some(e))
                 // TODO: this might not be the fastest way (I call a function in each hashmaps value)
                 {
                     vec![extension.handle_message(&payload.data)]

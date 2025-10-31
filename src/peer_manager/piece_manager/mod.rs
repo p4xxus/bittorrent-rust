@@ -24,9 +24,8 @@ impl PieceManager {
     pub(super) fn build(
         file_path: PathBuf,
         info_hash_hex: String,
-        exists: bool,
     ) -> Result<Self, PeerManagerError> {
-        let file = get_file(file_path, exists)?;
+        let file = get_file(file_path)?;
         let download_queue = DownloadQueue::new();
 
         Ok(Self {
@@ -36,9 +35,12 @@ impl PieceManager {
         })
     }
 }
-fn get_file(path: PathBuf, exists: bool) -> Result<File, PeerManagerError> {
+fn get_file(path: PathBuf) -> Result<File, PeerManagerError> {
+    // TODO: I'm not sure whether thats the best way
+    // so if a file doesn't exist _anymore_ then it will just create a new one, although we may want to fail
+    let exists = std::fs::exists(&path)?;
     OpenOptions::new()
-        .create(exists)
+        .create(!exists)
         .append(true)
         .truncate(false)
         .open(&path)
