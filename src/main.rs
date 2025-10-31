@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_bittorrent::client::Client;
+use codecrafters_bittorrent::client::{Client, ClientOptions};
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
 use codecrafters_bittorrent::{Peer, Torrent, TrackerRequest};
 use std::error::Error;
@@ -144,10 +144,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             torrent: torrent_path,
         } => {
-            let mut client = Client::new().await?;
-            client
-                .add_torrent(PEER_PORT, torrent_path, output.clone())
-                .await?;
+            let mut client = Client::new(ClientOptions::default()).await?;
+            client.add_torrent(torrent_path, output.clone()).await?;
 
             std::thread::sleep(std::time::Duration::MAX);
         }
@@ -155,10 +153,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             magnet_link,
         } => {
-            let client = Client::new().await?;
-            client
-                .add_magnet(PEER_PORT, magnet_link, output.clone())
-                .await?;
+            let client = Client::new(ClientOptions::default()).await?;
+            client.add_magnet(magnet_link, output.clone()).await?;
 
             std::thread::sleep(std::time::Duration::MAX);
         }

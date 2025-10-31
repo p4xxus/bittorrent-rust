@@ -25,44 +25,56 @@ const DATABASE_NAME: &'static str = "files";
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
     peer_managers: Arc<Mutex<HashSet<InfoHash>>>,
+    options: ClientOptions,
+}
+
+#[derive(Clone, Copy)]
+pub struct ClientOptions {
+    pub(crate) port: u16,
+    pub(crate) ip_addr: Ipv4Addr,
+}
+
+impl Default for ClientOptions {
+    fn default() -> Self {
+        Self {
+            port: 6881,
+            ip_addr: Ipv4Addr::UNSPECIFIED,
+        }
+    }
 }
 
 impl Client {
-    pub async fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new(options: ClientOptions) -> Result<Self, Box<dyn Error>> {
         let db_conn = Arc::new(SurrealDbConn::new(DATABASE_NAME).await?);
         Ok(Self {
             db_conn,
             peer_managers: Arc::new(Mutex::new(HashSet::new())),
+            options,
         })
     }
 
     pub async fn add_torrent(
         &mut self,
-        peer_port: u16,
         torrent_path: &PathBuf,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
         let torrent = Torrent::read_from_file(torrent_path)?;
-        self.start_download_torrent(peer_port, torrent, output_path)
-            .await?;
+        self.start_download_torrent(torrent, output_path).await?;
         Ok(())
     }
 
     pub async fn add_magnet(
         &self,
-        peer_port: u16,
         magnet_link_str: &str,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
         let magnet_link = MagnetLink::from_url(magnet_link_str)?;
-        self.start_download_magnet(peer_port, magnet_link, output_path)
-            .await?;
+        self.start_download_magnet(magnet_link, output_path).await?;
         Ok(())
     }
 
     async fn start_download_magnet(
         &self,
-        peer_port: u16,
         magnet_link: MagnetLink,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
@@ -85,7 +97,6 @@ impl Client {
 
     async fn start_download_torrent(
         &self,
-        peer_port: u16,
         torrent: Torrent,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
@@ -118,36 +129,16 @@ impl Client {
     fn start_peer_manager(&self, peer_manager: PeerManager, info_hash: InfoHash) {
         println!("Now down-/uploading file with hash {info_hash}.");
         let peer_managers = Arc::clone(&self.peer_managers);
+        let client_options = self.options;
         tokio::spawn(async move {
             peer_managers.lock().unwrap().insert(info_hash);
-            if let Err(err) = peer_manager.run().await {
+            if let Err(err) = peer_manager.run(client_options).await {
                 println!("The peer manager responsible for the hash {info_hash} failed.");
                 println!("REASON:");
                 println!("{err}");
                 peer_managers.lock().unwrap().remove(&info_hash);
             }
         });
-    }
-
-    // TODO: not sure if this needs self in the future at all
-    async fn start_peer_listener(
-        &self,
-        info_hash: InfoHash,
-        peer_port: u16,
-        peer_id: [u8; 20],
-        peer_manager_tx: &mpsc::Sender<ReqMsgFromPeer>,
-    ) -> io::Result<()> {
-        let addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, peer_port);
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        while let Ok((stream, _addr)) = listener.accept().await {
-            let peer =
-                Peer::connect_from_stream(stream, info_hash, peer_id, peer_manager_tx.clone())
-                    .await
-                    .context("initializing incoming peer connection")
-                    .unwrap();
-            peer.run().await.unwrap();
-        }
-        Ok(())
     }
 }
 

@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
-    client::PEER_ID,
+    client::{ClientOptions, PEER_ID},
     peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
     tracker::{TrackerRequestError, TrackerResponse},
@@ -72,12 +72,15 @@ impl PeerFetcher {
 }
 
 impl PeerManager {
-    pub(super) async fn req_tracker(&mut self) -> Result<(), TrackerRequestError> {
+    pub(super) async fn req_tracker(
+        &mut self,
+        client_options: ClientOptions,
+    ) -> Result<(), TrackerRequestError> {
         let left_to_download = self.get_bytes_left_to_download();
         let info_hash = self.get_info_hash();
 
-        // TODO: port
-        let tracker_request = TrackerRequest::new(&info_hash, PEER_ID, 6882, left_to_download);
+        let tracker_request =
+            TrackerRequest::new(&info_hash, PEER_ID, client_options.port, left_to_download);
 
         if let Some(res) = self
             .peer_fetcher

@@ -4,6 +4,7 @@ use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 
 use crate::{
     PeerManager,
+    client::ClientOptions,
     extensions::{ExtensionMessage, ExtensionType},
     magnet_links::metadata_piece_manager::MetadataPieceManager,
     messages::payloads::BitfieldPayload,
@@ -16,9 +17,12 @@ use crate::{
 };
 
 impl PeerManager {
-    pub(crate) async fn run(mut self) -> Result<(), PeerManagerError> {
+    pub(crate) async fn run(
+        mut self,
+        client_options: ClientOptions,
+    ) -> Result<(), PeerManagerError> {
         // we gotta make an initial request to the tracker to construct the stream with the interval
-        self.req_tracker()
+        self.req_tracker(client_options)
             .await
             .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
 
@@ -171,7 +175,7 @@ impl PeerManager {
                 }
                 PeerManagerReceiverStream::SendTrackerUpdate => {
                     dbg!("gotta request the tracker");
-                    self.req_tracker()
+                    self.req_tracker(client_options)
                         .await
                         .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
                 }
