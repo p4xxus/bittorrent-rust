@@ -1,10 +1,10 @@
 use std::{
-    collections::HashMap,
+    collections::HashSet,
     error::Error,
     io,
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use anyhow::Context;
@@ -24,7 +24,7 @@ const DATABASE_NAME: &'static str = "files";
 
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
-    peer_managers: HashMap<InfoHash, PeerManager>,
+    peer_managers: Arc<Mutex<HashSet<InfoHash>>>,
 }
 
 impl Client {
@@ -32,11 +32,11 @@ impl Client {
         let db_conn = Arc::new(SurrealDbConn::new(DATABASE_NAME).await?);
         Ok(Self {
             db_conn,
-            peer_managers: HashMap::new(),
+            peer_managers: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
-    pub async fn download_torrent(
+    pub async fn add_torrent(
         &mut self,
         peer_port: u16,
         torrent_path: &PathBuf,
@@ -48,8 +48,8 @@ impl Client {
         Ok(())
     }
 
-    pub async fn download_magnet(
-        &mut self,
+    pub async fn add_magnet(
+        &self,
         peer_port: u16,
         magnet_link_str: &str,
         output_path: Option<PathBuf>,
@@ -78,20 +78,7 @@ impl Client {
             }
         };
 
-        tokio::spawn(async move {
-            let _ = peer_manager.run().await;
-        });
-
-        // self.add_peers_to_manager(response.peers.0, info_hash, *PEER_ID, &peer_manager_tx)
-        //     .await;
-
-        // self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
-        //     .await?;
-
-        loop {
-            tokio::task::yield_now().await;
-        }
-        println!("we're done");
+        self.start_peer_manager(peer_manager, info_hash);
 
         Ok(())
     }
@@ -123,22 +110,23 @@ impl Client {
         let peer_manager =
             PeerManager::init_from_entry(info_hash_hex, Arc::clone(&self.db_conn), file_entry)?;
 
-        tokio::spawn(async move {
-            let _ = peer_manager.run().await;
-        });
-
-        // self.add_peers_to_manager(response.peers.0, info_hash, *PEER_ID, &peer_manager_tx)
-        //     .await;
-
-        // self.start_peer_listener(info_hash, peer_port, *PEER_ID, &peer_manager_tx)
-        //     .await?;
-
-        loop {
-            tokio::task::yield_now().await;
-        }
-        println!("we're done");
+        self.start_peer_manager(peer_manager, info_hash);
 
         Ok(())
+    }
+
+    fn start_peer_manager(&self, peer_manager: PeerManager, info_hash: InfoHash) {
+        println!("Now down-/uploading file with hash {info_hash}.");
+        let peer_managers = Arc::clone(&self.peer_managers);
+        tokio::spawn(async move {
+            peer_managers.lock().unwrap().insert(info_hash);
+            if let Err(err) = peer_manager.run().await {
+                println!("The peer manager responsible for the hash {info_hash} failed.");
+                println!("REASON:");
+                println!("{err}");
+                peer_managers.lock().unwrap().remove(&info_hash);
+            }
+        });
     }
 
     // TODO: not sure if this needs self in the future at all

@@ -38,7 +38,7 @@ impl<'a> TrackerRequest<'a> {
     }
     fn to_url_encoded(&self) -> String {
         let mut url_encoded = String::new();
-        url_encoded.push_str(&format!("info_hash={}", escape_bytes_url(&self.info_hash)));
+        url_encoded.push_str(&format!("info_hash={}", escape_bytes_url(self.info_hash)));
         url_encoded.push_str(&format!("&peer_id={}", escape_bytes_url(self.peer_id)));
         url_encoded.push_str(&format!("&port={}", self.port));
         url_encoded.push_str(&format!("&uploaded={}", self.uploaded));
@@ -63,7 +63,7 @@ impl<'a> TrackerRequest<'a> {
         .build().ok()?;
 
         let query = self.to_url_encoded();
-        let mut announce_urls = announce_urls
+        let announce_urls = announce_urls
             .into_iter()
             .map(|mut url| {
                 url.set_query(Some(&query));
@@ -71,12 +71,13 @@ impl<'a> TrackerRequest<'a> {
             })
             .enumerate();
 
-        while let Some((index, url)) = announce_urls.next()
-            && let Ok(response) = client.get(url).send().await
-            && let Ok(bytes) = response.bytes().await
-            && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
-        {
-            return Some((index, tracker_response));
+        for (index, url) in announce_urls {
+            if let Ok(response) = client.get(url).send().await
+                && let Ok(bytes) = response.bytes().await
+                && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
+            {
+                return Some((index, tracker_response));
+            }
         }
 
         None

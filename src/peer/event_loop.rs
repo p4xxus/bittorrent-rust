@@ -90,7 +90,7 @@ impl Peer {
                                 let extensions = self.extensions.lock().unwrap();
                                 if let Some(extensions) = extensions.as_ref()
                                     && let Some(extension_id) = extensions.iter().find_map(|d| {
-                                        (d.1.get_ext_type() == ext_type).then(|| *d.0)
+                                        (d.1.get_ext_type() == ext_type).then_some(*d.0)
                                     })
                                 {
                                     Some(PeerMessage::Extended(BasicExtensionPayload {

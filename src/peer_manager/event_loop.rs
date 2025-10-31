@@ -157,7 +157,7 @@ impl PeerManager {
                         }
                         ReqMessage::PeerDisconnected(peer_id) => {
                             self.peers.remove(&*peer_id);
-                            self.piece_selector.remove_peer(&*peer_id);
+                            self.piece_selector.remove_peer(&peer_id);
                         }
                         ReqMessage::PeerBitfield(bitfield) => {
                             self.piece_selector

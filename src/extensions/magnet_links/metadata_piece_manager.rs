@@ -53,7 +53,7 @@ impl MetadataPieceManager {
                         .iter()
                         .enumerate()
                         .filter_map(|(index, i_have)| {
-                            (matches!(i_have, BlockState::InProcess(_))).then(|| index)
+                            matches!(i_have, BlockState::InProcess(_)).then_some(index)
                         })
                         .choose(&mut rand::rng())
                 })?

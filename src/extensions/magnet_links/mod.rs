@@ -10,7 +10,7 @@ use crate::torrent::InfoHash;
 pub(crate) mod metadata_msg;
 pub(crate) mod metadata_piece_manager;
 
-const INFO_HASH_PREFIX: &'static str = "urn:btih";
+const INFO_HASH_PREFIX: &str = "urn:btih";
 
 impl FromStr for InfoHash {
     type Err = anyhow::Error;

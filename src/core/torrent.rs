@@ -1,4 +1,4 @@
-use std::{ops::Deref, path::PathBuf};
+use std::{fmt::Display, ops::Deref, path::PathBuf};
 
 pub use hashes::Hashes;
 use rand::seq::SliceRandom;
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub struct InfoHash(pub [u8; 20]);
 
 impl Deref for InfoHash {
@@ -14,6 +14,13 @@ impl Deref for InfoHash {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl Display for InfoHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = self.iter().map(u8::to_string).collect::<String>();
+        f.write_str(&str)
     }
 }
 

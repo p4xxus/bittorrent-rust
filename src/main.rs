@@ -146,17 +146,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         } => {
             let mut client = Client::new().await?;
             client
-                .download_torrent(PEER_PORT, torrent_path, output.clone())
+                .add_torrent(PEER_PORT, torrent_path, output.clone())
                 .await?;
+
+            std::thread::sleep(std::time::Duration::MAX);
         }
         DecodeMetadataType::DownloadMagnet {
             output,
             magnet_link,
         } => {
-            let mut client = Client::new().await?;
+            let client = Client::new().await?;
             client
-                .download_magnet(PEER_PORT, magnet_link, output.clone())
+                .add_magnet(PEER_PORT, magnet_link, output.clone())
                 .await?;
+
+            std::thread::sleep(std::time::Duration::MAX);
         }
     }
 

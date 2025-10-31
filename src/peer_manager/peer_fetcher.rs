@@ -51,15 +51,16 @@ impl PeerFetcher {
         &mut self,
         tracker_request: TrackerRequest<'a>,
     ) -> Option<TrackerResponse> {
-        while let Some(tier) = self.announce_list.0.iter_mut().next()
-            && let Some((url_index_in_tier, tracker_response)) = tracker_request
+        while let Some(tier) = self.announce_list.0.iter_mut().next() {
+            if let Some((url_index_in_tier, tracker_response)) = tracker_request
                 .get_first_response_in_list(tier.clone())
                 .await
-        {
-            let url = tier.remove(url_index_in_tier);
-            tier.insert(0, url);
+            {
+                let url = tier.remove(url_index_in_tier);
+                tier.insert(0, url);
 
-            return Some(tracker_response);
+                return Some(tracker_response);
+            }
         }
 
         None
@@ -72,7 +73,7 @@ impl PeerFetcher {
 
 impl PeerManager {
     pub(super) async fn req_tracker(&mut self) -> Result<(), TrackerRequestError> {
-        let left_to_download = self.get_left_to_download();
+        let left_to_download = self.get_bytes_left_to_download();
         let info_hash = self.get_info_hash();
 
         // TODO: port
@@ -94,13 +95,13 @@ impl PeerManager {
         Ok(())
     }
 
-    fn get_left_to_download(&self) -> u32 {
+    fn get_bytes_left_to_download(&self) -> u32 {
         let total_pieces = self.piece_selector.get_have().iter().count() as u32;
         let num_pieces_we_have = self
             .piece_selector
             .get_have()
             .iter()
-            .fold(0u32, |acc, e| e.then(|| acc + 1).unwrap_or(acc));
+            .fold(0u32, |acc, e| e.then_some(acc + 1).unwrap_or(acc));
         match total_pieces - num_pieces_we_have {
             0 => 999, // the piece_selector will return an empty Vec if we don't know the metainfo yet, so we'll just return anything really
             num_pieces_we_dont_have => num_pieces_we_dont_have * BLOCK_MAX,
