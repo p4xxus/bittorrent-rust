@@ -228,33 +228,6 @@ impl PeerManager {
         }
     }
 
-    async fn req_tracker(&mut self) -> Result<(), TrackerRequestError> {
-        let file_length = match &self.torrent_state {
-            TorrentState::WaitingForMetadata { .. } => 999, // this is just an arbitrary value really
-            TorrentState::Downloading { metainfo, .. } => metainfo.get_length(),
-            TorrentState::Seeding { metainfo } => metainfo.get_length(),
-        };
-        let info_hash = self.get_info_hash();
-
-        // TODO: port
-        let tracker_request = TrackerRequest::new(&info_hash, PEER_ID, 6882, file_length);
-
-        if let Some(res) = self
-            .peer_fetcher
-            .get_tracker_response(tracker_request)
-            .await
-        {
-            self.peer_fetcher
-                .add_peers_to_manager(info_hash, res.peers.0)
-                .await;
-            self.peer_fetcher.set_tracker_req_interval(res.interval);
-        } else {
-            panic!("Could not get a valid response from the tracker.");
-        }
-
-        Ok(())
-    }
-
     // TODO: we might want to save the InfoHash in the PeerManager itself
     fn get_info_hash(&self) -> InfoHash {
         match &self.torrent_state {

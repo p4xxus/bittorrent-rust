@@ -25,19 +25,14 @@ pub struct TrackerRequest<'a> {
 }
 
 impl<'a> TrackerRequest<'a> {
-    pub fn new(
-        info_hash: &'a InfoHash,
-        peer_id: &'a [u8; 20],
-        port: u16,
-        file_length: u32,
-    ) -> Self {
+    pub fn new(info_hash: &'a InfoHash, peer_id: &'a [u8; 20], port: u16, left: u32) -> Self {
         Self {
             info_hash,
             peer_id,
             port,
             uploaded: 0,
             downloaded: 0,
-            left: file_length,
+            left,
             compact: 1, // TODO
         }
     }

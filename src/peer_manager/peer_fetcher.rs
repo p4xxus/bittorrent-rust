@@ -2,11 +2,11 @@ use std::{net::SocketAddrV4, time::Duration};
 use tokio::sync::mpsc;
 
 use crate::{
-    Peer, TrackerRequest,
+    BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::PEER_ID,
     peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
-    tracker::TrackerResponse,
+    tracker::{TrackerRequestError, TrackerResponse},
 };
 
 const DEFAULT_TRACKER_TIMEOUT: Duration = Duration::from_secs(120);
@@ -67,5 +67,43 @@ impl PeerFetcher {
 
     pub(super) fn set_tracker_req_interval(&mut self, timeout: usize) {
         self.tracker_timeout = Duration::from_secs(timeout as u64);
+    }
+}
+
+impl PeerManager {
+    pub(super) async fn req_tracker(&mut self) -> Result<(), TrackerRequestError> {
+        let left_to_download = self.get_left_to_download();
+        let info_hash = self.get_info_hash();
+
+        // TODO: port
+        let tracker_request = TrackerRequest::new(&info_hash, PEER_ID, 6882, left_to_download);
+
+        if let Some(res) = self
+            .peer_fetcher
+            .get_tracker_response(tracker_request)
+            .await
+        {
+            self.peer_fetcher
+                .add_peers_to_manager(info_hash, res.peers.0)
+                .await;
+            self.peer_fetcher.set_tracker_req_interval(res.interval);
+        } else {
+            panic!("Could not get a valid response from the tracker.");
+        }
+
+        Ok(())
+    }
+
+    fn get_left_to_download(&self) -> u32 {
+        let total_pieces = self.piece_selector.get_have().iter().count() as u32;
+        let num_pieces_we_have = self
+            .piece_selector
+            .get_have()
+            .iter()
+            .fold(0u32, |acc, e| e.then(|| acc + 1).unwrap_or(acc));
+        match total_pieces - num_pieces_we_have {
+            0 => 999, // the piece_selector will return an empty Vec if we don't know the metainfo yet, so we'll just return anything really
+            num_pieces_we_dont_have => num_pieces_we_dont_have * BLOCK_MAX,
+        }
     }
 }
