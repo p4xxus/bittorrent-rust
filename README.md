@@ -16,7 +16,7 @@ You cannot seed yet.
 - [X] ok, I added the ut_metadata extension to support magnet_links
 - [ ] seeding a file (partially done if we're already connected to a peer and he asks for a block)
 - [X] storing the state of a file to disk so that you can stop a download and continue later
-- [ ] retrying if none of the peers seed (currently it just iters through the peer-list once and if no one's there, no file for you)
+- [x] periodically requesting the tracker to get peers and shit
 - [ ] choking algorithm
 - [ ] actually usable CLI or something
 
