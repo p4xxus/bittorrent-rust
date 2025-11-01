@@ -12,7 +12,6 @@ mod req_preparer;
 
 #[derive(Debug)]
 pub(super) struct PieceManager {
-    /// if it's None, we are finished
     download_queue: DownloadQueue,
     /// the output file
     file: File,

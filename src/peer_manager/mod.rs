@@ -6,8 +6,6 @@ use bytes::{Bytes, BytesMut};
 use tokio::sync::mpsc;
 
 use crate::{
-    TrackerRequest,
-    client::PEER_ID,
     database::{DBEntry, SurrealDbConn},
     extensions::{
         ExtensionMessage, ExtensionType,
@@ -21,7 +19,6 @@ use crate::{
         piece_manager::{PieceManager, piece_selector::PieceSelector},
     },
     torrent::{AnnounceList, InfoHash, Metainfo},
-    tracker::TrackerRequestError,
 };
 
 pub mod error;
@@ -60,11 +57,14 @@ enum TorrentState {
         metainfo: Metainfo,
         piece_manager: PieceManager,
     },
-    // Optional: A seeding state
+    // at some point we might want to make a different PieceManager that is optimized for seeding but for now this is sufficient
     Seeding {
         metainfo: Metainfo,
-        // ... state relevant to seeding
+        piece_manager: PieceManager,
     },
+    // I've found no other way to do this since when transitioning to seeding, I have to move the state but cannot directly swap/transmute it
+    /// DO NOT EVER CONSTRUCT THIS OTHER THAN FOR TRANSITIONING
+    None,
 }
 
 /// from peer
@@ -208,7 +208,6 @@ impl PeerManager {
         )
     }
 
-    // todo: make an option struct for like port and shit
     fn new(
         torrent_state: TorrentState,
         db_conn: Arc<SurrealDbConn>,
@@ -236,7 +235,8 @@ impl PeerManager {
                 ..
             } => metadata_piece_manager.get_info_hash(),
             TorrentState::Downloading { metainfo, .. } => metainfo.info_hash(),
-            TorrentState::Seeding { metainfo } => metainfo.info_hash(),
+            TorrentState::Seeding { metainfo, .. } => metainfo.info_hash(),
+            TorrentState::None => unreachable!("This state is only used for transitioning states"),
         }
     }
 }

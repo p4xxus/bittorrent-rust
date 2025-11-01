@@ -78,12 +78,15 @@ impl PeerManager {
                                 self.broadcast_peers(msg).await;
                             }
                         }
-                        ReqMessage::NeedBlock(block) => {
-                            if let TorrentState::Downloading {
+                        ReqMessage::NeedBlock(block) => match &self.torrent_state {
+                            TorrentState::Downloading {
                                 metainfo,
                                 piece_manager,
-                            } = &self.torrent_state
-                            {
+                            }
+                            | TorrentState::Seeding {
+                                metainfo,
+                                piece_manager,
+                            } => {
                                 let block = piece_manager.get_block(
                                     &mut self.piece_selector,
                                     block,
@@ -92,7 +95,8 @@ impl PeerManager {
                                 let msg = ResMessage::Block(block);
                                 self.send_peer(peer_msg.peer_id, msg).await;
                             }
-                        }
+                            _ => (),
+                        },
                         ReqMessage::NeedBlockQueue => {
                             let max_req = self.get_peers_max_req(&peer_msg.peer_id);
                             if let TorrentState::Downloading {
@@ -186,7 +190,17 @@ impl PeerManager {
     }
 
     fn transition_seeding(&mut self) {
-        todo!("we're done downloading")
+        let TorrentState::Downloading {
+            metainfo,
+            piece_manager,
+        } = std::mem::replace(&mut self.torrent_state, TorrentState::None)
+        else {
+            return;
+        };
+        self.torrent_state = TorrentState::Seeding {
+            metainfo,
+            piece_manager,
+        };
     }
 
     async fn transition_downloading(

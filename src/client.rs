@@ -1,20 +1,15 @@
 use std::{
     collections::HashSet,
     error::Error,
-    io,
-    net::{Ipv4Addr, SocketAddrV4},
+    net::{Ipv4Addr, SocketAddrV4, TcpListener},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use anyhow::Context;
-use tokio::sync::mpsc;
-
 use crate::{
     database::SurrealDbConn,
     magnet_links::MagnetLink,
-    peer::Peer,
-    peer_manager::{PeerManager, ReqMsgFromPeer},
+    peer_manager::PeerManager,
     torrent::{AnnounceList, InfoHash, Torrent},
 };
 
@@ -35,10 +30,24 @@ pub struct ClientOptions {
 }
 
 impl Default for ClientOptions {
+    /// - the default ip address is LOCALHOST
+    /// - the default port is the first one thats free between 6881..=6889
     fn default() -> Self {
+        let ip_addr = Ipv4Addr::LOCALHOST;
+        // Common behavior is for a downloader to try to listen on port 6881 and if that
+        // port is taken try 6882, then 6883, etc. and give up after 6889
+        let mut free_port = None;
+        for port in 6881..=6889 {
+            let ipv4 = SocketAddrV4::new(ip_addr, port);
+            if TcpListener::bind(ipv4).is_ok() {
+                free_port = Some(port);
+                break;
+            }
+        }
+
         Self {
-            port: 6881,
-            ip_addr: Ipv4Addr::UNSPECIFIED,
+            port: free_port.expect("No free port was found."),
+            ip_addr,
         }
     }
 }
