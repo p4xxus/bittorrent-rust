@@ -17,7 +17,7 @@ use crate::peer_manager::{ReqMessage, ReqMsgFromPeer, ResMessage};
 pub const DEFAULT_MAX_REQUESTS: u32 = 100;
 
 pub mod conn;
-mod error;
+pub(crate) mod error;
 mod event_loop;
 mod extensions;
 pub mod initial_handshake;

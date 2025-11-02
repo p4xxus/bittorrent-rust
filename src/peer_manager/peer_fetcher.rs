@@ -1,12 +1,13 @@
 use std::{net::SocketAddrV4, time::Duration};
-use tokio::sync::mpsc;
+use tokio::{net::TcpStream, sync::mpsc};
 
 use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::{ClientOptions, PEER_ID},
+    peer::error::PeerError,
     peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
-    tracker::{TrackerRequestError, TrackerResponse},
+    tracker::TrackerResponse,
 };
 
 const DEFAULT_TRACKER_TIMEOUT: Duration = Duration::from_secs(120);
@@ -31,6 +32,7 @@ impl PeerFetcher {
             tracker_timeout: DEFAULT_TRACKER_TIMEOUT,
         }
     }
+
     pub(super) async fn add_peers_to_manager(
         &self,
         info_hash: InfoHash,
@@ -39,12 +41,24 @@ impl PeerFetcher {
         for addr in addresses {
             let peer_manager_tx = self.tx.clone();
             tokio::spawn(async move {
-                let peer = Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx)
-                    .await
-                    .expect("Failed to connect to peer.");
-                peer.run().await.unwrap();
+                if let Ok(peer) =
+                    Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx).await
+                {
+                    let _err = peer.run().await;
+                }
             });
         }
+    }
+
+    pub(super) async fn add_peer_from_stream(
+        &self,
+        info_hash: InfoHash,
+        stream: TcpStream,
+    ) -> Result<(), PeerError> {
+        Peer::connect_from_stream(stream, info_hash, *PEER_ID, self.tx.clone())
+            .await?
+            .run()
+            .await
     }
 
     pub(super) async fn get_tracker_response<'a>(
@@ -72,10 +86,7 @@ impl PeerFetcher {
 }
 
 impl PeerManager {
-    pub(super) async fn req_tracker(
-        &mut self,
-        client_options: ClientOptions,
-    ) -> Result<(), TrackerRequestError> {
+    pub(super) async fn req_tracker_add_peers(&mut self, client_options: ClientOptions) {
         let left_to_download = self.get_bytes_left_to_download();
         let info_hash = self.get_info_hash();
 
@@ -94,8 +105,6 @@ impl PeerManager {
         } else {
             panic!("Could not get a valid response from the tracker.");
         }
-
-        Ok(())
     }
 
     fn get_bytes_left_to_download(&self) -> u32 {

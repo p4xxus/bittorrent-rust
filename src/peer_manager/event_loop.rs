@@ -1,6 +1,11 @@
-use std::path::PathBuf;
+use std::{io, net::SocketAddrV4, path::PathBuf};
 
-use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use futures_core::Stream;
+use tokio::net::TcpListener;
+use tokio_stream::{
+    StreamExt,
+    wrappers::{ReceiverStream, TcpListenerStream},
+};
 
 use crate::{
     PeerManager,
@@ -21,28 +26,15 @@ impl PeerManager {
         mut self,
         client_options: ClientOptions,
     ) -> Result<(), PeerManagerError> {
-        // we gotta make an initial request to the tracker to construct the stream with the interval
-        self.req_tracker(client_options)
-            .await
-            .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
-
-        let peer_stream = ReceiverStream::new(
-            self.rx
-                .take()
-                .expect("it is set after initialization of Self"),
-        )
-        .map(PeerManagerReceiverStream::PeerMessage);
-        let tracker_stream =
-            futures_util::stream::repeat(PeerManagerReceiverStream::SendTrackerUpdate)
-                .throttle(self.peer_fetcher.get_tracker_req_interval());
-        let peer_manager_stream = tracker_stream.merge(peer_stream);
+        let peer_manager_stream = self.construct_stream(client_options).await?;
         tokio::pin!(peer_manager_stream);
 
         // the first message is always a message to request the tracker which we already did though
-        assert_eq!(
-            Some(PeerManagerReceiverStream::SendTrackerUpdate),
-            peer_manager_stream.next().await
-        );
+        let next_item = peer_manager_stream.next().await;
+        assert!(matches!(
+            next_item,
+            Some(PeerManagerReceiverStream::SendTrackerUpdate)
+        ));
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
             match peer_manager_message {
                 PeerManagerReceiverStream::PeerMessage(peer_msg) => {
@@ -179,14 +171,49 @@ impl PeerManager {
                 }
                 PeerManagerReceiverStream::SendTrackerUpdate => {
                     dbg!("gotta request the tracker");
-                    self.req_tracker(client_options)
+                    self.req_tracker_add_peers(client_options).await;
+                }
+                PeerManagerReceiverStream::PeerConnection(tcp_stream) => {
+                    if let Err(peer_err) = self
+                        .peer_fetcher
+                        .add_peer_from_stream(self.get_info_hash(), tcp_stream)
                         .await
-                        .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
+                    {
+                        println!("Error occurred when connecting to peer: {peer_err}.");
+                    };
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// constructs a stream consisting of three parts:
+    /// 1. the mpsc::Received of all the peers
+    /// 2. a sort of notifier that tells us when to request the tracker again
+    /// 3. an incoming tcp connection
+    async fn construct_stream(
+        &mut self,
+        options: ClientOptions,
+    ) -> io::Result<impl Stream<Item = PeerManagerReceiverStream> + use<>> {
+        // we gotta make an initial request to the tracker to construct the stream with the interval
+        self.req_tracker_add_peers(options).await;
+
+        // stream construction
+        let tcp_listener =
+            TcpListener::bind(SocketAddrV4::new(options.ip_addr, options.port)).await?;
+        let tcp_listener_stream = TcpListenerStream::new(tcp_listener)
+            .filter_map(move |a| a.ok().map(PeerManagerReceiverStream::PeerConnection));
+        let peer_stream = ReceiverStream::new(
+            self.rx
+                .take()
+                .expect("it is set after initialization of Self"),
+        )
+        .map(PeerManagerReceiverStream::PeerMessage);
+        let tracker_stream = futures_util::stream::repeat(0_u8)
+            .throttle(self.peer_fetcher.get_tracker_req_interval())
+            .map(|_| PeerManagerReceiverStream::SendTrackerUpdate);
+        Ok(tracker_stream.merge(peer_stream).merge(tcp_listener_stream))
     }
 
     fn transition_seeding(&mut self) {

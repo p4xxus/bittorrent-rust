@@ -25,13 +25,6 @@ pub enum PeerManagerError {
         error: SendError<ResMessage>,
         msg: String,
     },
-    /// This error should never happen realistically. It would happen if the RequestManager needs to
-    /// get a peer state from a peer that hasn't sent the NewConnection message yet. This message is
-    /// sent by every peer at the beginning though.
-    #[error(
-        "An internal error occured: the peer that was requested was not found in the current list."
-    )]
-    PeerNotFound,
     #[error("An error occured when writing to the file: `{0}`")]
     WritingToFile(#[from] io::Error),
     #[error("No file name provided")]

@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc, time::Duration};
 
 use bytes::{Bytes, BytesMut};
-use tokio::sync::mpsc;
+use tokio::{net::TcpStream, sync::mpsc};
 
 use crate::{
     database::{DBEntry, SurrealDbConn},
@@ -88,8 +88,9 @@ pub struct ReqMsgFromPeer {
     pub(crate) peer_id: [u8; 20],
     pub(crate) msg: ReqMessage,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 enum PeerManagerReceiverStream {
+    PeerConnection(TcpStream),
     PeerMessage(ReqMsgFromPeer),
     SendTrackerUpdate,
 }
