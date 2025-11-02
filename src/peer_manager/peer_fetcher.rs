@@ -43,8 +43,9 @@ impl PeerFetcher {
             tokio::spawn(async move {
                 if let Ok(peer) =
                     Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx).await
+                    && let Err(peer_error) = peer.run().await
                 {
-                    let _err = peer.run().await;
+                    println!("Error occurred when connecting to peer: {peer_error}.");
                 }
             });
         }
