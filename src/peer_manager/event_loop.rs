@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddrV4, path::PathBuf};
+use std::{io, net::SocketAddr, path::PathBuf};
 
 use futures_core::Stream;
 use tokio::net::TcpListener;
@@ -201,7 +201,7 @@ impl PeerManager {
 
         // stream construction
         let tcp_listener =
-            TcpListener::bind(SocketAddrV4::new(options.ip_addr, options.port)).await?;
+            TcpListener::bind(SocketAddr::new(options.ip_addr, options.port)).await?;
         let tcp_listener_stream = TcpListenerStream::new(tcp_listener)
             .filter_map(move |a| a.ok().map(PeerManagerReceiverStream::PeerConnection));
         let peer_stream = ReceiverStream::new(

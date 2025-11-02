@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -31,7 +33,7 @@ impl<'a> TrackerRequest<'a> {
             uploaded: 0,
             downloaded: 0,
             left,
-            compact: 1, // TODO
+            compact: 0, // we currently don't use the compact form since we don't support IPv6 in compact form yet
         }
     }
     fn to_url_encoded(&self) -> String {
@@ -71,7 +73,7 @@ impl<'a> TrackerRequest<'a> {
 
         for (index, url) in announce_urls {
             if let Ok(response) = client.get(url).send().await
-                && let Ok(bytes) = response.bytes().await
+                && let Ok(bytes) = dbg!(response.bytes().await)
                 && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
             {
                 return Some((index, tracker_response));
@@ -95,43 +97,41 @@ fn escape_bytes_url(bytes: &[u8; 20]) -> String {
         .collect()
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TrackerResponse {
     /// An integer, indicating how often your client should make a request to the tracker, in seconds.
     pub interval: usize,
     /// A string, which contains list of peers that your client can connect to.
     /// Each peer is represented using 6 bytes.
     /// The first 4 bytes are the peer's IP address and the last 2 bytes are the peer's port number.
-    pub peers: PeerConnections,
+    peers: PeerConnections,
+}
+impl TrackerResponse {
+    pub fn get_peers(&self) -> Vec<SocketAddr> {
+        self.peers
+            .0
+            .clone()
+            .into_iter()
+            .map(SocketAddr::from)
+            .collect()
+    }
 }
 
 mod peers {
     use std::{
         fmt,
-        net::{Ipv4Addr, SocketAddrV4},
+        net::{IpAddr, Ipv4Addr, SocketAddr},
     };
 
+    use bytes::Bytes;
     use serde::{
-        Deserialize, Deserializer, Serialize, Serializer,
+        Deserialize, Deserializer,
         de::{self, Visitor},
     };
-    #[derive(Debug, Clone)]
-    pub struct PeerConnections(pub Vec<SocketAddrV4>);
-    struct PeersVisitor;
 
-    impl Serialize for PeerConnections {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            let mut bytes = Vec::with_capacity(self.0.len() * 6);
-            for peer in &self.0 {
-                bytes.extend(&peer.ip().octets());
-                bytes.extend(&peer.port().to_be_bytes());
-            }
-            serializer.serialize_bytes(&bytes)
-        }
-    }
+    #[derive(Debug, Clone)]
+    pub struct PeerConnections(pub Vec<SocketAddr>);
+    struct PeersVisitor;
 
     impl<'de> Visitor<'de> for PeersVisitor {
         type Value = PeerConnections;
@@ -139,6 +139,7 @@ mod peers {
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter.write_str("A string of multiples of 6 bytes")
         }
+
         fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
         where
             E: de::Error,
@@ -152,18 +153,24 @@ mod peers {
             Ok(PeerConnections(
                 v.chunks_exact(6)
                     .map(|chunk| {
-                        if let &[a, b, c, d, p1, p2] = chunk {
-                            SocketAddrV4::new(
-                                Ipv4Addr::new(a, b, c, d),
-                                u16::from_be_bytes([p1, p2]),
-                            )
-                        } else {
-                            unreachable!();
-                        }
+                        let &[a, b, c, d, p1, p2] =
+                            chunk.try_into().expect("the chunk is of length 6");
+                        SocketAddr::new(
+                            Ipv4Addr::new(a, b, c, d).into(),
+                            u16::from_be_bytes([p1, p2]),
+                        )
                     })
                     .collect(),
             ))
         }
+    }
+
+    #[derive(Debug, Clone, Deserialize)]
+    pub struct PeerConnection {
+        #[serde(rename = "peer id")]
+        pub _peer_id: Bytes,
+        ip: Bytes,
+        port: u16,
     }
 
     impl<'de> Deserialize<'de> for PeerConnections {
@@ -171,41 +178,61 @@ mod peers {
         where
             D: Deserializer<'de>,
         {
-            deserializer.deserialize_bytes(PeersVisitor)
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum Peers {
+                Compact(Bytes),
+                NonCompact(Vec<PeerConnection>),
+            }
+
+            let peers = Peers::deserialize(deserializer)?;
+            match peers {
+                Peers::Compact(bytes) => PeersVisitor.visit_bytes(&bytes),
+                Peers::NonCompact(peer_connections) => Ok(peer_connections.into()),
+            }
+        }
+    }
+
+    impl From<Vec<PeerConnection>> for PeerConnections {
+        fn from(peer_connections: Vec<PeerConnection>) -> Self {
+            Self(
+                peer_connections
+                    .into_iter()
+                    .filter_map(|peer| {
+                        let ip_str = String::from_utf8(peer.ip.to_vec()).ok()?;
+                        let ip_addr = ip_str.parse::<IpAddr>().ok()?;
+                        Some((ip_addr, peer.port).into())
+                    })
+                    .collect(),
+            )
         }
     }
 }
 
-// #[derive(Debug, Clone, Deserialize, Serialize)]
-// pub struct PeerConnection {
-//     #[serde(rename = "peer id")]
-//     pub peer_id: Option<serde_bytes::ByteArray<20>>,
-//     #[serde(with = "serde_bytes")]
-//     ip: Vec<u8>,
-//     port: u16,
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_bencode;
+    #[test]
+    fn test_deserialize_compact_peers() {
+        // A dictionary with a 'peers' key containing a 6-byte string
+        let compact_peers = b"d8:intervali0e5:peers6:\x01\x02\x03\x04\x1a\x0ee";
+        let expected_socket_addr = "1.2.3.4:6670".parse::<SocketAddr>().unwrap();
+        let tracker_response: TrackerResponse = serde_bencode::from_bytes(compact_peers).unwrap();
+        assert_eq!(tracker_response.get_peers(), vec![expected_socket_addr]);
+    }
 
-// impl PeerConnection {
-//     pub fn get_socket_addr(&self) -> SocketAddrV4 {
-//         if let Ok(ip) = String::from_utf8(self.ip.clone()) {
-//             SocketAddrV4::new(ip.parse().unwrap(), self.port)
-//         } else {
-//             todo!(); // impl Ipv6
-//         }
-//         // TODO: error handling (IP address or dns name as a string)
-//     }
-// }
-
-#[derive(Error, Debug)]
-pub enum TrackerRequestError {
-    #[error("Failed to parse announce url: `{0}`")]
-    InvalidUrl(#[from] url::ParseError),
-    #[error("Failed with error: `{error}` to deserialize tracker response: `{response:?}`")]
-    InvalidResponse {
-        error: serde_bencode::Error,
-        response: bytes::Bytes,
-        url: String,
-    },
-    #[error("Something failed with requesting the tracker-response: `{0}`")]
-    ReqwestError(#[from] reqwest::Error),
+    #[test]
+    fn test_deserialize_non_compact_peers() {
+        // A dictionary with a 'peers' key containing a list of dictionaries
+        let non_compact_peers =
+        b"d8:intervali0e5:peersld2:ip9:127.0.0.17:peer id20:abcdefghij01234567894:porti6881eed2:ip13:2001:db8::4137:peer id20:abcdefghij01234567894:porti443eeee";
+        let expected_socket_addrs = vec![
+            "127.0.0.1:6881".parse::<SocketAddr>().unwrap(),
+            "[2001:db8::413]:443".parse::<SocketAddr>().unwrap(),
+        ];
+        let tracker_response: TrackerResponse =
+            serde_bencode::from_bytes(non_compact_peers).unwrap();
+        assert_eq!(tracker_response.get_peers(), expected_socket_addrs);
+    }
 }

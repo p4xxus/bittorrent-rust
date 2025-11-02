@@ -1,4 +1,4 @@
-use std::{net::SocketAddrV4, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 use tokio::{net::TcpStream, sync::mpsc};
 
 use crate::{
@@ -36,7 +36,7 @@ impl PeerFetcher {
     pub(super) async fn add_peers_to_manager(
         &self,
         info_hash: InfoHash,
-        addresses: impl IntoIterator<Item = SocketAddrV4>,
+        addresses: impl IntoIterator<Item = SocketAddr>,
     ) {
         for addr in addresses {
             let peer_manager_tx = self.tx.clone();
@@ -100,7 +100,7 @@ impl PeerManager {
             .await
         {
             self.peer_fetcher
-                .add_peers_to_manager(info_hash, res.peers.0)
+                .add_peers_to_manager(info_hash, res.get_peers())
                 .await;
             self.peer_fetcher.set_tracker_req_interval(res.interval);
         } else {

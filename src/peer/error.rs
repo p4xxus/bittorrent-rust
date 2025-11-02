@@ -1,4 +1,4 @@
-use std::{io, mem::Discriminant, net::SocketAddrV4};
+use std::{io, mem::Discriminant, net::SocketAddr};
 
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -26,10 +26,7 @@ pub enum PeerError {
     #[error("The peer unexpectedly disconnected.")]
     PeerDisconnected,
     #[error("Failed to establish a tcp connection to the address `{addr}` with error: `{error:?}`")]
-    FailedToConnect {
-        error: io::Error,
-        addr: SocketAddrV4,
-    },
+    FailedToConnect { error: io::Error, addr: SocketAddr },
     #[error(
         "Failed to read the bytes from the remote peer needed for the handshake with the error: `{0}`."
     )]

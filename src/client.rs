@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     error::Error,
-    net::{Ipv4Addr, SocketAddrV4, TcpListener},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -26,19 +26,19 @@ pub struct Client {
 #[derive(Clone, Copy)]
 pub struct ClientOptions {
     pub(crate) port: u16,
-    pub(crate) ip_addr: Ipv4Addr,
+    pub(crate) ip_addr: IpAddr,
 }
 
 impl Default for ClientOptions {
     /// - the default ip address is LOCALHOST
     /// - the default port is the first one thats free between 6881..=6889
     fn default() -> Self {
-        let ip_addr = Ipv4Addr::LOCALHOST;
+        let ip_addr = Ipv4Addr::LOCALHOST.into();
         // Common behavior is for a downloader to try to listen on port 6881 and if that
         // port is taken try 6882, then 6883, etc. and give up after 6889
         let mut free_port = None;
         for port in 6881..=6889 {
-            let ipv4 = SocketAddrV4::new(ip_addr, port);
+            let ipv4 = SocketAddr::new(ip_addr, port);
             if TcpListener::bind(ipv4).is_ok() {
                 free_port = Some(port);
                 break;

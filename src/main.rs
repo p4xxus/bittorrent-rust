@@ -4,7 +4,7 @@ use codecrafters_bittorrent::client::{Client, ClientOptions};
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
 use codecrafters_bittorrent::{Peer, Torrent, TrackerRequest};
 use std::error::Error;
-use std::net::SocketAddrV4;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
@@ -32,7 +32,7 @@ enum DecodeMetadataType {
     },
     Handshake {
         torrent: PathBuf,
-        addr: SocketAddrV4,
+        addr: SocketAddr,
     },
     DownloadPiece {
         #[arg(short)]
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .get_first_response_in_list(vec![torrent.announce])
                 .await
                 .unwrap();
-            for peer in response.peers.0 {
+            for peer in response.get_peers() {
                 println!("{peer:?}");
             }
         }

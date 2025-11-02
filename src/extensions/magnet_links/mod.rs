@@ -134,8 +134,8 @@ mod test_magnetlink {
             magnet_link.trackers,
             vec![
                 url::Url::parse("http://bittorrent-test-tracker.codecrafters.io/announce")
-                    .expect("is valid");
-                2
+                    .expect("is valid"),
+                url::Url::parse("udp://bittorrent-test-tracker.codecrafters.io").expect("is valid")
             ]
         );
         assert_eq!(magnet_link.file_name, Some("magnet1.gif".to_owned()));

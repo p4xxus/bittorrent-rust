@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::mem;
-use std::net::SocketAddrV4;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -38,7 +38,7 @@ const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl Peer {
     pub async fn connect_from_addr(
-        addr: SocketAddrV4,
+        addr: SocketAddr,
         info_hash: InfoHash,
         peer_id: [u8; 20],
         peer_manager_tx: Sender<ReqMsgFromPeer>,
