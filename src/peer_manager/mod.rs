@@ -174,10 +174,10 @@ impl BlockState {
 
 impl PeerManager {
     pub(crate) fn init_from_entry(
-        info_hash_hex: String,
         db_conn: Arc<SurrealDbConn>,
         file_entry: DBEntry,
     ) -> Result<Self, PeerManagerError> {
+        let info_hash_hex = file_entry.torrent_info.info_hash().as_hex();
         let piece_manager = PieceManager::build(file_entry.file.to_path_buf(), info_hash_hex)?;
         let torrent_state = TorrentState::Downloading {
             metainfo: file_entry.torrent_info,
@@ -229,7 +229,7 @@ impl PeerManager {
     }
 
     // TODO: we might want to save the InfoHash in the PeerManager itself
-    fn get_info_hash(&self) -> InfoHash {
+    pub fn get_info_hash(&self) -> InfoHash {
         match &self.torrent_state {
             TorrentState::WaitingForMetadata {
                 metadata_piece_manager,

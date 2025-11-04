@@ -201,7 +201,7 @@ impl PeerManager {
 
         // stream construction
         let tcp_listener =
-            TcpListener::bind(SocketAddr::new(options.ip_addr, options.port)).await?;
+            TcpListener::bind(SocketAddr::new(options.ip_addr, options.port)).await?; // HUGE TODO
         let tcp_listener_stream = TcpListenerStream::new(tcp_listener)
             .filter_map(move |a| a.ok().map(PeerManagerReceiverStream::PeerConnection));
         let peer_stream = ReceiverStream::new(

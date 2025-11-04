@@ -1,4 +1,4 @@
-use std::{net::SocketAddrV4, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 
 use thiserror::Error;
 use url::form_urlencoded::Parse;
@@ -37,7 +37,7 @@ pub struct MagnetLink {
     pub info_hash: InfoHash,
     pub file_name: Option<String>,
     trackers: Vec<url::Url>,
-    peer_addrs: Vec<SocketAddrV4>,
+    peer_addrs: Vec<SocketAddr>,
 }
 
 impl MagnetLink {
@@ -71,7 +71,7 @@ impl MagnetLink {
                     }
                 }
                 "x.pe" => {
-                    if let Ok(addr) = SocketAddrV4::from_str(&value) {
+                    if let Ok(addr) = SocketAddr::from_str(&value) {
                         peer_addrs.push(addr);
                     }
                 }

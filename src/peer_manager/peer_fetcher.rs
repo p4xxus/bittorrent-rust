@@ -66,7 +66,7 @@ impl PeerFetcher {
         &mut self,
         tracker_request: TrackerRequest<'a>,
     ) -> Option<TrackerResponse> {
-        while let Some(tier) = self.announce_list.0.iter_mut().next() {
+        for tier in self.announce_list.0.iter_mut() {
             if let Some((url_index_in_tier, tracker_response)) = tracker_request
                 .get_first_response_in_list(tier.clone())
                 .await

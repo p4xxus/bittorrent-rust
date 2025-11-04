@@ -63,6 +63,10 @@ impl SurrealDbConn {
         Ok(entry)
     }
 
+    pub(crate) async fn get_all(&self) -> Vec<DBEntry> {
+        self.db.select("files").await.unwrap_or_default()
+    }
+
     pub(crate) async fn set_entry(
         &self,
         file_path: PathBuf,

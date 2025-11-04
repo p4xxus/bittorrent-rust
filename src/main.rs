@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_bittorrent::client::{Client, ClientOptions};
+use codecrafters_bittorrent::client::ClientOptions;
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
 use codecrafters_bittorrent::{Peer, Torrent, TrackerRequest};
 use std::error::Error;
@@ -50,6 +50,7 @@ enum DecodeMetadataType {
         output: Option<PathBuf>,
         magnet_link: String,
     },
+    Continue,
 }
 
 // Usage: your_program.sh decode "<encoded_value>"
@@ -144,7 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             torrent: torrent_path,
         } => {
-            let mut client = Client::new(ClientOptions::default()).await?;
+            let mut client = ClientOptions::default().build().await?;
             client.add_torrent(torrent_path, output.clone()).await?;
 
             std::thread::sleep(std::time::Duration::MAX);
@@ -153,9 +154,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             magnet_link,
         } => {
-            let client = Client::new(ClientOptions::default()).await?;
+            let client = ClientOptions::default().build().await?;
             client.add_magnet(magnet_link, output.clone()).await?;
 
+            std::thread::sleep(std::time::Duration::MAX);
+        }
+        DecodeMetadataType::Continue => {
+            ClientOptions::default().build().await?;
             std::thread::sleep(std::time::Duration::MAX);
         }
     }

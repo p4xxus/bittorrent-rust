@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     error::Error,
+    io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -17,16 +18,23 @@ pub(crate) const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
 
 const DATABASE_NAME: &'static str = "files";
 
+#[derive(Debug)]
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
     peer_managers: Arc<Mutex<HashSet<InfoHash>>>,
     options: ClientOptions,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ClientOptions {
     pub(crate) port: u16,
     pub(crate) ip_addr: IpAddr,
+}
+
+impl From<ClientOptions> for SocketAddr {
+    fn from(value: ClientOptions) -> Self {
+        SocketAddr::new(value.ip_addr, value.port)
+    }
 }
 
 impl Default for ClientOptions {
@@ -38,8 +46,8 @@ impl Default for ClientOptions {
         // port is taken try 6882, then 6883, etc. and give up after 6889
         let mut free_port = None;
         for port in 6881..=6889 {
-            let ipv4 = SocketAddr::new(ip_addr, port);
-            if TcpListener::bind(ipv4).is_ok() {
+            let ip = SocketAddr::new(ip_addr, port);
+            if TcpListener::bind(ip).is_ok() {
                 free_port = Some(port);
                 break;
             }
@@ -52,14 +60,53 @@ impl Default for ClientOptions {
     }
 }
 
+impl ClientOptions {
+    pub async fn build(self) -> Result<Client, Box<dyn Error>> {
+        if !self.is_port_free() {
+            return Err(Box::new(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                "Port is already in use.",
+            ))); // TODO: ClientError
+        }
+
+        let client = Client::new(self)?;
+        client.add_unfinished_torrents_from_db().await;
+
+        Ok(client)
+    }
+
+    fn is_port_free(&self) -> bool {
+        TcpListener::bind(SocketAddr::from(*self)).is_ok()
+    }
+}
+
 impl Client {
-    pub async fn new(options: ClientOptions) -> Result<Self, Box<dyn Error>> {
-        let db_conn = Arc::new(SurrealDbConn::new(DATABASE_NAME).await?);
+    fn new(options: ClientOptions) -> Result<Self, Box<dyn Error>> {
+        let db_conn = Arc::new(tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async move { SurrealDbConn::new(DATABASE_NAME).await })
+        })?);
+
         Ok(Self {
             db_conn,
             peer_managers: Arc::new(Mutex::new(HashSet::new())),
             options,
         })
+    }
+
+    async fn add_unfinished_torrents_from_db(&self) {
+        let entries = self
+            .db_conn
+            .get_all()
+            .await
+            .into_iter()
+            .filter(|e| !e.is_finished());
+
+        for peer_manager in entries
+            .filter_map(|entry| PeerManager::init_from_entry(Arc::clone(&self.db_conn), entry).ok())
+        {
+            self.start_peer_manager(peer_manager);
+        }
     }
 
     pub async fn add_torrent(
@@ -82,24 +129,29 @@ impl Client {
         Ok(())
     }
 
+    fn is_already_downloading(&self, info_hash: &InfoHash) -> bool {
+        self.peer_managers.lock().unwrap().contains(info_hash)
+    }
+
     async fn start_download_magnet(
         &self,
         magnet_link: MagnetLink,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
         let info_hash = magnet_link.info_hash;
-
-        let info_hash_hex = info_hash.as_hex();
-        let peer_manager = match self.db_conn.get_entry(&info_hash_hex).await? {
+        if self.is_already_downloading(&info_hash) {
+            return Ok(());
+        }
+        let peer_manager = match self.db_conn.get_entry(&info_hash.as_hex()).await? {
             Some(file_entry) => {
-                PeerManager::init_from_entry(info_hash_hex, Arc::clone(&self.db_conn), file_entry)?
+                PeerManager::init_from_entry(Arc::clone(&self.db_conn), file_entry)?
             }
             None => {
                 PeerManager::init_from_magnet(magnet_link, Arc::clone(&self.db_conn), output_path)
             }
         };
 
-        self.start_peer_manager(peer_manager, info_hash);
+        self.start_peer_manager(peer_manager);
 
         Ok(())
     }
@@ -110,9 +162,10 @@ impl Client {
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
         let info_hash = torrent.info.info_hash();
-
-        let info_hash_hex = info_hash.as_hex();
-        let file_entry = match self.db_conn.get_entry(&info_hash_hex).await? {
+        if self.is_already_downloading(&info_hash) {
+            return Ok(());
+        }
+        let file_entry = match self.db_conn.get_entry(&info_hash.as_hex()).await? {
             Some(file_entry) => file_entry,
             None => {
                 let announce_list = torrent
@@ -127,15 +180,15 @@ impl Client {
                     .await?
             }
         };
-        let peer_manager =
-            PeerManager::init_from_entry(info_hash_hex, Arc::clone(&self.db_conn), file_entry)?;
+        let peer_manager = PeerManager::init_from_entry(Arc::clone(&self.db_conn), file_entry)?;
 
-        self.start_peer_manager(peer_manager, info_hash);
+        self.start_peer_manager(peer_manager);
 
         Ok(())
     }
 
-    fn start_peer_manager(&self, peer_manager: PeerManager, info_hash: InfoHash) {
+    fn start_peer_manager(&self, peer_manager: PeerManager) {
+        let info_hash = peer_manager.get_info_hash();
         println!("Now down-/uploading file with hash {info_hash}.");
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;

@@ -33,7 +33,7 @@ impl<'a> TrackerRequest<'a> {
             uploaded: 0,
             downloaded: 0,
             left,
-            compact: 0, // we currently don't use the compact form since we don't support IPv6 in compact form yet
+            compact: 1,
         }
     }
     fn to_url_encoded(&self) -> String {
