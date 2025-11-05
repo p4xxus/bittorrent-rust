@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     error::Error,
+    fmt::Display,
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::PathBuf,
@@ -21,7 +22,7 @@ pub(crate) const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
 
 const DATABASE_NAME: &str = "files";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
     peer_managers: Arc<Mutex<HashMap<InfoHash, mpsc::Sender<ReqMsgFromPeer>>>>,
@@ -32,6 +33,8 @@ pub struct Client {
 pub struct ClientOptions {
     pub(crate) port: u16,
     pub(crate) ip_addr: IpAddr,
+    /// whether to continue downloading previous files
+    continue_download: bool,
 }
 
 impl From<ClientOptions> for SocketAddr {
@@ -59,6 +62,7 @@ impl Default for ClientOptions {
         Self {
             port: free_port.expect("No free port was found."),
             ip_addr,
+            continue_download: true,
         }
     }
 }
@@ -73,7 +77,10 @@ impl ClientOptions {
         }
 
         let client = Client::new(self)?;
-        client.add_unfinished_torrents_from_db().await;
+
+        if self.continue_download {
+            client.add_unfinished_torrents_from_db().await;
+        }
 
         client.spawn_listener()?;
 
@@ -82,6 +89,11 @@ impl ClientOptions {
 
     fn is_port_free(&self) -> bool {
         TcpListener::bind(SocketAddr::from(*self)).is_ok()
+    }
+
+    pub fn continue_download(mut self, continue_download: bool) -> Self {
+        self.continue_download = continue_download;
+        self
     }
 }
 
@@ -212,7 +224,7 @@ impl Client {
     }
 
     fn spawn_listener(&self) -> io::Result<()> {
-        let peer_managers = Arc::clone(&self.peer_managers);
+        let client = self.clone();
         let socket_addr = SocketAddr::from(self.options);
         let tcp_stream = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
@@ -226,25 +238,67 @@ impl Client {
                 if let Ok(handshake_recv) =
                     Handshake::retrieve_new_connection(&mut tcp_stream).await
                 {
-                    let peer_manager_tx = peer_managers
+                    let peer_manager_tx = client
+                        .peer_managers
                         .lock()
                         .unwrap()
                         .get(&handshake_recv.info_hash)
                         .cloned();
 
-                    if let Some(peer_manager_tx) = peer_manager_tx
-                        && let Ok(peer) = crate::Peer::new_from_stream(
-                            tcp_stream,
-                            handshake_recv,
-                            peer_manager_tx.clone(),
-                        )
-                        .await
-                    {
-                        tokio::spawn(async move {
-                            if let Err(error) = peer.run().await {
-                                println!("Peer closed with the following error: {error}.");
+                    let get_peer = async || {
+                        return match peer_manager_tx {
+                            // first, do we already have a peer_manager running for this torrent?
+                            Some(peer_manager_tx) => crate::Peer::new_from_stream(
+                                tcp_stream,
+                                handshake_recv,
+                                peer_manager_tx.clone(),
+                            )
+                            .await
+                            .map_err(stringify),
+
+                            // No, then we might still have the file but just not a peer manager
+                            None => {
+                                // TODO: 2x error handling
+                                if let Some(entry) = client
+                                    .db_conn
+                                    .get_entry(&handshake_recv.info_hash.as_hex())
+                                    .await
+                                    .map_err(stringify)?
+                                {
+                                    let peer_manager = PeerManager::init_from_entry(
+                                        Arc::clone(&client.db_conn),
+                                        entry,
+                                    )
+                                    .map_err(stringify)?;
+                                    let peer_manager_tx = peer_manager.get_sender();
+
+                                    client.start_peer_manager(peer_manager);
+
+                                    crate::Peer::new_from_stream(
+                                        tcp_stream,
+                                        handshake_recv,
+                                        peer_manager_tx,
+                                    )
+                                    .await
+                                    .map_err(stringify)
+                                } else {
+                                    Err("A peer want something, we don't have D:<".to_string())
+                                }
                             }
-                        });
+                        };
+                    };
+                    match get_peer().await {
+                        Ok(peer) => {
+                            tokio::spawn(async move {
+                                if let Err(error) = peer.run().await {
+                                    // TODO: error handling
+                                    println!("Peer closed with the following error: {error}.");
+                                }
+                            });
+                        }
+                        Err(error) => println!(
+                            "We got an error when trying to initialize a peer who want to connect to us: {error}"
+                        ),
                     }
                 }
             }
@@ -252,6 +306,11 @@ impl Client {
 
         Ok(())
     }
+}
+
+/// temporary error handling
+fn stringify(error: impl Display) -> String {
+    format!("Got error: {error}.")
 }
 
 pub mod errors {

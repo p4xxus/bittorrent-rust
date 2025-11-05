@@ -3,7 +3,9 @@ use crate::{
     tracker::{peers::PeerConnections, peers6::Peer6Connections},
 };
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
+
+const TRACKER_REQ_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TrackerRequest<'a> {
@@ -72,7 +74,7 @@ impl<'a> TrackerRequest<'a> {
             .enumerate();
 
         for (index, url) in announce_urls {
-            if let Ok(response) = client.get(url).send().await
+            if let Ok(response) = client.get(url).timeout(TRACKER_REQ_TIMEOUT).send().await
                 && let Ok(bytes) = dbg!(response.bytes().await)
                 && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
             {

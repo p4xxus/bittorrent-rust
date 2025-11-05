@@ -154,7 +154,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             magnet_link,
         } => {
-            let client = ClientOptions::default().build().await?;
+            let client = ClientOptions::default()
+                .continue_download(false)
+                .build()
+                .await?;
             client.add_magnet(magnet_link, output.clone()).await?;
 
             std::thread::sleep(std::time::Duration::MAX);

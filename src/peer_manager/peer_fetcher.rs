@@ -38,6 +38,7 @@ impl PeerFetcher {
         addresses: impl IntoIterator<Item = SocketAddr>,
     ) {
         for addr in addresses {
+            println!("Connecting to {addr}");
             let peer_manager_tx = self.tx.clone();
             tokio::spawn(async move {
                 if let Ok(peer) =
