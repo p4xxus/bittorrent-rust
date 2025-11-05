@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, bincode::Encode, bincode::Decode)]
 pub struct InfoHash(pub [u8; 20]);
 
 impl Deref for InfoHash {

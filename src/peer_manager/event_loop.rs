@@ -1,11 +1,7 @@
-use std::{io, net::SocketAddr, path::PathBuf};
+use std::{io, path::PathBuf};
 
 use futures_core::Stream;
-use tokio::net::TcpListener;
-use tokio_stream::{
-    StreamExt,
-    wrappers::{ReceiverStream, TcpListenerStream},
-};
+use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 
 use crate::{
     PeerManager,
@@ -26,15 +22,14 @@ impl PeerManager {
         mut self,
         client_options: ClientOptions,
     ) -> Result<(), PeerManagerError> {
-        let peer_manager_stream = self.construct_stream(client_options).await?;
+        let peer_manager_stream = self.construct_stream(&client_options).await?;
         tokio::pin!(peer_manager_stream);
 
         // the first message is always a message to request the tracker which we already did though
-        let next_item = peer_manager_stream.next().await;
-        assert!(matches!(
-            next_item,
+        assert_eq!(
+            peer_manager_stream.next().await,
             Some(PeerManagerReceiverStream::SendTrackerUpdate)
-        ));
+        );
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
             match peer_manager_message {
                 PeerManagerReceiverStream::PeerMessage(peer_msg) => {
@@ -171,16 +166,7 @@ impl PeerManager {
                 }
                 PeerManagerReceiverStream::SendTrackerUpdate => {
                     dbg!("gotta request the tracker");
-                    self.req_tracker_add_peers(client_options).await;
-                }
-                PeerManagerReceiverStream::PeerConnection(tcp_stream) => {
-                    if let Err(peer_err) = self
-                        .peer_fetcher
-                        .add_peer_from_stream(self.get_info_hash(), tcp_stream)
-                        .await
-                    {
-                        println!("Error occurred when connecting to peer: {peer_err}.");
-                    };
+                    self.req_tracker_add_peers(&client_options).await;
                 }
             }
         }
@@ -191,19 +177,14 @@ impl PeerManager {
     /// constructs a stream consisting of three parts:
     /// 1. the mpsc::Received of all the peers
     /// 2. a sort of notifier that tells us when to request the tracker again
-    /// 3. an incoming tcp connection
     async fn construct_stream(
         &mut self,
-        options: ClientOptions,
+        options: &ClientOptions,
     ) -> io::Result<impl Stream<Item = PeerManagerReceiverStream> + use<>> {
         // we gotta make an initial request to the tracker to construct the stream with the interval
         self.req_tracker_add_peers(options).await;
 
         // stream construction
-        let tcp_listener =
-            TcpListener::bind(SocketAddr::new(options.ip_addr, options.port)).await?; // HUGE TODO
-        let tcp_listener_stream = TcpListenerStream::new(tcp_listener)
-            .filter_map(move |a| a.ok().map(PeerManagerReceiverStream::PeerConnection));
         let peer_stream = ReceiverStream::new(
             self.rx
                 .take()
@@ -213,7 +194,8 @@ impl PeerManager {
         let tracker_stream = futures_util::stream::repeat(0_u8)
             .throttle(self.peer_fetcher.get_tracker_req_interval())
             .map(|_| PeerManagerReceiverStream::SendTrackerUpdate);
-        Ok(tracker_stream.merge(peer_stream).merge(tcp_listener_stream))
+
+        Ok(tracker_stream.merge(peer_stream))
     }
 
     fn transition_seeding(&mut self) {

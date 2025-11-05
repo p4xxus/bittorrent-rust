@@ -37,4 +37,6 @@ pub enum PeerError {
     EncodeHandshake(#[from] bincode::error::EncodeError),
     #[error("Failed to de- or encode the message from/to the peer with the error: `{0}`")]
     BenCoding(#[from] serde_bencode::Error),
+    #[error("The InfoHash does not match")]
+    InfoHashMismatch,
 }

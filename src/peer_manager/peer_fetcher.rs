@@ -1,10 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
-use tokio::{net::TcpStream, sync::mpsc};
+use tokio::sync::mpsc;
 
 use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::{ClientOptions, PEER_ID},
-    peer::error::PeerError,
     peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
     tracker::TrackerResponse,
@@ -14,7 +13,7 @@ const DEFAULT_TRACKER_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug)]
 pub(super) struct PeerFetcher {
-    tx: mpsc::Sender<ReqMsgFromPeer>,
+    pub(super) tx: mpsc::Sender<ReqMsgFromPeer>,
     /// something like [ [ tracker1, tracker2 ], [ backup1 ] ]
     pub(super) announce_list: AnnounceList,
     tracker_timeout: Duration,
@@ -51,17 +50,6 @@ impl PeerFetcher {
         }
     }
 
-    pub(super) async fn add_peer_from_stream(
-        &self,
-        info_hash: InfoHash,
-        stream: TcpStream,
-    ) -> Result<(), PeerError> {
-        Peer::connect_from_stream(stream, info_hash, *PEER_ID, self.tx.clone())
-            .await?
-            .run()
-            .await
-    }
-
     pub(super) async fn get_tracker_response<'a>(
         &mut self,
         tracker_request: TrackerRequest<'a>,
@@ -87,7 +75,7 @@ impl PeerFetcher {
 }
 
 impl PeerManager {
-    pub(super) async fn req_tracker_add_peers(&mut self, client_options: ClientOptions) {
+    pub(super) async fn req_tracker_add_peers(&mut self, client_options: &ClientOptions) {
         let left_to_download = self.get_bytes_left_to_download();
         let info_hash = self.get_info_hash();
 

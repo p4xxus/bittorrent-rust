@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc, time::Duration};
 
 use bytes::{Bytes, BytesMut};
-use tokio::{net::TcpStream, sync::mpsc};
+use tokio::sync::mpsc;
 
 use crate::{
     database::{DBEntry, SurrealDbConn},
@@ -88,9 +88,8 @@ pub struct ReqMsgFromPeer {
     pub(crate) peer_id: [u8; 20],
     pub(crate) msg: ReqMessage,
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 enum PeerManagerReceiverStream {
-    PeerConnection(TcpStream),
     PeerMessage(ReqMsgFromPeer),
     SendTrackerUpdate,
 }
@@ -239,5 +238,9 @@ impl PeerManager {
             TorrentState::Seeding { metainfo, .. } => metainfo.info_hash(),
             TorrentState::None => unreachable!("This state is only used for transitioning states"),
         }
+    }
+
+    pub fn get_sender(&self) -> mpsc::Sender<ReqMsgFromPeer> {
+        self.peer_fetcher.tx.clone()
     }
 }

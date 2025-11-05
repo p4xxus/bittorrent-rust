@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     error::Error,
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
@@ -7,21 +7,24 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use tokio::{net::TcpListener as TokioTcpListener, sync::mpsc};
+
 use crate::{
     database::SurrealDbConn,
     magnet_links::MagnetLink,
-    peer_manager::PeerManager,
+    peer::initial_handshake::Handshake,
+    peer_manager::{PeerManager, ReqMsgFromPeer},
     torrent::{AnnounceList, InfoHash, Torrent},
 };
 
 pub(crate) const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
 
-const DATABASE_NAME: &'static str = "files";
+const DATABASE_NAME: &str = "files";
 
 #[derive(Debug)]
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
-    peer_managers: Arc<Mutex<HashSet<InfoHash>>>,
+    peer_managers: Arc<Mutex<HashMap<InfoHash, mpsc::Sender<ReqMsgFromPeer>>>>,
     options: ClientOptions,
 }
 
@@ -72,6 +75,8 @@ impl ClientOptions {
         let client = Client::new(self)?;
         client.add_unfinished_torrents_from_db().await;
 
+        client.spawn_listener()?;
+
         Ok(client)
     }
 
@@ -89,7 +94,7 @@ impl Client {
 
         Ok(Self {
             db_conn,
-            peer_managers: Arc::new(Mutex::new(HashSet::new())),
+            peer_managers: Arc::new(Mutex::new(HashMap::new())),
             options,
         })
     }
@@ -130,7 +135,7 @@ impl Client {
     }
 
     fn is_already_downloading(&self, info_hash: &InfoHash) -> bool {
-        self.peer_managers.lock().unwrap().contains(info_hash)
+        self.peer_managers.lock().unwrap().contains_key(info_hash)
     }
 
     async fn start_download_magnet(
@@ -193,7 +198,10 @@ impl Client {
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
         tokio::spawn(async move {
-            peer_managers.lock().unwrap().insert(info_hash);
+            peer_managers
+                .lock()
+                .unwrap()
+                .insert(info_hash, peer_manager.get_sender());
             if let Err(err) = peer_manager.run(client_options).await {
                 println!("The peer manager responsible for the hash {info_hash} failed.");
                 println!("REASON:");
@@ -201,6 +209,48 @@ impl Client {
                 peer_managers.lock().unwrap().remove(&info_hash);
             }
         });
+    }
+
+    fn spawn_listener(&self) -> io::Result<()> {
+        let peer_managers = Arc::clone(&self.peer_managers);
+        let socket_addr = SocketAddr::from(self.options);
+        let tcp_stream = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { TokioTcpListener::bind(socket_addr).await })
+        })?;
+
+        println!("Listening on {socket_addr}.");
+
+        tokio::spawn(async move {
+            while let Ok((mut tcp_stream, _addr)) = tcp_stream.accept().await {
+                if let Ok(handshake_recv) =
+                    Handshake::retrieve_new_connection(&mut tcp_stream).await
+                {
+                    let peer_manager_tx = peer_managers
+                        .lock()
+                        .unwrap()
+                        .get(&handshake_recv.info_hash)
+                        .cloned();
+
+                    if let Some(peer_manager_tx) = peer_manager_tx
+                        && let Ok(peer) = crate::Peer::new_from_stream(
+                            tcp_stream,
+                            handshake_recv,
+                            peer_manager_tx.clone(),
+                        )
+                        .await
+                    {
+                        tokio::spawn(async move {
+                            if let Err(error) = peer.run().await {
+                                println!("Peer closed with the following error: {error}.");
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
+        Ok(())
     }
 }
 

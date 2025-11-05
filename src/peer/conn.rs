@@ -44,23 +44,22 @@ impl Peer {
         peer_manager_tx: Sender<ReqMsgFromPeer>,
     ) -> Result<Self, PeerError> {
         // set up tcp connection & shake hands
-        let tcp = tokio::net::TcpStream::connect(addr)
+        let mut tcp = tokio::net::TcpStream::connect(addr)
             .await
             .map_err(|error| PeerError::FailedToConnect { error, addr })?;
 
-        Peer::connect_from_stream(tcp, info_hash, peer_id, peer_manager_tx).await
+        let handshake_recv = Handshake::new(info_hash, peer_id)
+            .init_new_connection(&mut tcp)
+            .await?;
+
+        Peer::new_from_stream(tcp, handshake_recv, peer_manager_tx).await
     }
 
-    pub async fn connect_from_stream(
-        mut tcp: TcpStream,
-        info_hash: InfoHash,
-        peer_id: [u8; 20],
+    pub(crate) async fn new_from_stream(
+        tcp: TcpStream,
+        handshake_recv: Handshake,
         peer_manager_tx: Sender<ReqMsgFromPeer>,
     ) -> Result<Self, PeerError> {
-        // let _ = Handshake::new(info_hash, peer_id).has_extensions_enabled();
-        let handshake_recv = Handshake::new(info_hash, peer_id)
-            .shake_hands(&mut tcp)
-            .await?;
         println!("peer {} connected", tcp.peer_addr().unwrap());
 
         let peer_state = PeerState::new(handshake_recv.peer_id);
@@ -75,11 +74,9 @@ impl Peer {
         let receiver_stream = Some(get_stream(peer_reader, peer_manager_rx).await);
 
         // set up extensions
-        let extensions = if handshake_recv.has_extensions_enabled() {
-            Some(HashMap::new())
-        } else {
-            None
-        };
+        let extensions = handshake_recv
+            .has_extensions_enabled()
+            .then_some(HashMap::new());
 
         Ok(Self {
             state: peer_state,

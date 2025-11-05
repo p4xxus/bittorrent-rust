@@ -110,8 +110,8 @@ pub struct TrackerResponse {
 impl TrackerResponse {
     pub fn get_peers(&self) -> Vec<SocketAddr> {
         let mut all_peers = self.peers.0.clone();
-        all_peers.extend_from_slice(&self.peers6.clone().unwrap_or_default().0);
-        all_peers.into_iter().map(SocketAddr::from).collect()
+        all_peers.extend(self.peers6.clone().unwrap_or_default().0);
+        all_peers.into_iter().collect()
     }
 }
 
@@ -223,14 +223,8 @@ mod peers6 {
 
     struct Peers6Visitor;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, Default)]
     pub(super) struct Peer6Connections(pub(super) Vec<SocketAddr>);
-
-    impl Default for Peer6Connections {
-        fn default() -> Self {
-            Self(Default::default())
-        }
-    }
 
     impl<'de> Visitor<'de> for Peers6Visitor {
         type Value = Peer6Connections;
