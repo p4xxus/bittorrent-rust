@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 
@@ -40,6 +41,7 @@ pub struct Peer {
     /// maps extended message ID to the handler for the extension
     pub(crate) extensions: Mutex<Option<HashMap<u8, Box<dyn ExtensionHandler>>>>,
 }
+#[derive(Debug)]
 struct ReqQueue {
     to_send: Vec<PeerMessage>,
     have_sent: usize,
@@ -100,5 +102,16 @@ impl ReqQueue {
             to_send: Vec::new(),
             have_sent: 0,
         }
+    }
+}
+
+impl Debug for Peer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Peer")
+            .field("state", &self.state)
+            .field("queue", &self.queue)
+            .field("peer_manager_tx", &self.peer_manager_tx)
+            .field("extensions", &self.extensions)
+            .finish()
     }
 }

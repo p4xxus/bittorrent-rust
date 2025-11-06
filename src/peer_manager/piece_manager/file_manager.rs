@@ -35,8 +35,12 @@ impl PieceManager {
         }
     }
 
-    // it checks the hash, updates the bitfield and writes the piece to the file
-    // if this fails somewhere, it should be fine since the piece will get picked up later again
+    /// it checks the hash, updates the bitfield and writes the piece to the file
+    ///
+    /// # Errors
+    /// If writing to the file or the database fails it will return the corresponding error.
+    /// Note that I will just return Ok(()) if the hashes mismatch.
+    /// This is because the piece is discarded after this method is successful and will get picked up later again.
     async fn handle_piece(
         &mut self,
         piece_selector: &mut PieceSelector,
@@ -77,7 +81,7 @@ impl PieceManager {
         Ok(())
     }
 
-    /// returns a block a peer requested
+    /// reads a block from a file and returns it
     pub(in crate::peer_manager) fn get_block(
         &self,
         piece_selector: &mut PieceSelector,

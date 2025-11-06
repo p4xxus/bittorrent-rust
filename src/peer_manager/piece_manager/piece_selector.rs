@@ -9,12 +9,16 @@ use std::{
 
 use crate::peer_manager::PeerId;
 
-// 1.  We **keep** the `piece_rarity: Vec<u32>` as the single source of truth for piece rarity.
-// 2.  When a piece's rarity is updated (e.g., a peer connects and has the piece), we simply **push a new entry** `(new_rarity, piece_index)` into the `BinaryHeap`. We do **not** remove the old entry.
-// 3.  When we call `select_pieces_for_peer`, we pop an item (rarity_in_heap, piece_index)` from the heap.
-// 4.  **Crucially, we then check if `rarity_in_heap` matches the current, true rarity in `self.piece_rarity[piece_index]`.**
-//     *   If they don't match, it means this heap entry is **stale**. We discard it and pop the next one.
-//     *   If they match, this is a valid, up-to-date entry. We process it.
+/// Responsible for selecting the next piece:
+/// - implements the rarest-first strategy
+/// - if same rarity, goes by index
+///
+/// 1.  We **keep** the `piece_rarity: Vec<u32>` as the single source of truth for piece rarity.
+/// 2.  When a piece's rarity is updated (e.g., a peer connects and has the piece), we simply **push a new entry** `(new_rarity, piece_index)` into the `BinaryHeap`. We do **not** remove the old entry.
+/// 3.  When we call `select_pieces_for_peer`, we pop an item (rarity_in_heap, piece_index)` from the heap.
+/// 4.  **Crucially, we then check if `rarity_in_heap` matches the current, true rarity in `self.piece_rarity[piece_index]`.**
+///     *   If they don't match, it means this heap entry is **stale**. We discard it and pop the next one.
+///     *   If they match, this is a valid, up-to-date entry. We process it.
 
 // This "lazy" approach has some great benefits:
 // *   **Correctness:** We only ever act on the most up-to-date rarity information.
@@ -94,18 +98,17 @@ impl PieceSelector {
         self.pieces_in_flight.resize(n_pieces, false);
     }
 
+    /// use this function to add a new peer with an empty bitfield to this selector
     pub(in crate::peer_manager) fn add_peer(&mut self, id: PeerId) {
-        let n_pieces = if !self.have.is_empty() {
-            self.have.len()
-        } else {
-            {
+        let n_pieces = (!self.have.is_empty())
+            .then_some(self.have.len())
+            .or_else(|| {
                 self.peer_bitfields
                     .values()
                     .next()
                     .map(|bitfield| bitfield.len())
-                    .unwrap_or(0)
-            }
-        };
+            })
+            .unwrap_or(0);
         if let Some(old) = self.peer_bitfields.insert(id, vec![false; n_pieces]) {
             // this shouldn't happen, but if it does we're safe
             self.peer_bitfields.insert(id, old);

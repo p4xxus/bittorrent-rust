@@ -4,7 +4,7 @@ use crate::{extensions::ExtensionType, magnet_links::metadata_msg::MetadataReque
 
 use super::ExtensionHandler;
 
-pub struct ExtensionFactory;
+pub(crate) struct ExtensionFactory;
 
 impl ExtensionFactory {
     pub fn build(name: &str) -> Option<Box<dyn ExtensionHandler>> {

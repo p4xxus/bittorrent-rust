@@ -2,7 +2,7 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use codecrafters_bittorrent::client::ClientOptions;
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
-use codecrafters_bittorrent::{Peer, Torrent, TrackerRequest};
+use codecrafters_bittorrent::{Peer, TrackerRequest, torrent::Torrent};
 use std::error::Error;
 use std::net::SocketAddr;
 use std::path::PathBuf;

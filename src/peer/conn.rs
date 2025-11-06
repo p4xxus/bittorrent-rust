@@ -1,5 +1,9 @@
+//! Contains methods to construct all the connections and types relevant for the peer:
+//! Setting up TCP, constructing a stream of the remote peer & the peer manager.
+//!
+//! Also contains types that store the state of the peer (interested/choking, ...)
+
 use std::collections::HashMap;
-use std::mem;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -37,6 +41,7 @@ const CHANNEL_SIZE: usize = 16;
 const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl Peer {
+    /// Constructs a peer from an address
     pub async fn connect_from_addr(
         addr: SocketAddr,
         info_hash: InfoHash,
@@ -48,6 +53,7 @@ impl Peer {
             .await
             .map_err(|error| PeerError::FailedToConnect { error, addr })?;
 
+        println!("peer {} initially connected", tcp.peer_addr().unwrap());
         let handshake_recv = Handshake::new(info_hash, peer_id)
             .init_new_connection(&mut tcp)
             .await?;
@@ -55,6 +61,10 @@ impl Peer {
         Peer::new_from_stream(tcp, handshake_recv, peer_manager_tx).await
     }
 
+    /// Constructs a peer from an already existing connection.
+    /// The hands must already be shook in order to assure that the info-hash corresponds to the correct peer-manager
+    ///
+    /// This happens when its an incoming connection (for seeding).
     pub(crate) async fn new_from_stream(
         tcp: TcpStream,
         handshake_recv: Handshake,
@@ -71,7 +81,7 @@ impl Peer {
         // set up peer_manager connection
         let peer_manager_rx = peer_state.connect_to_peer_manager(&peer_manager_tx).await?;
         let (peer_writer, peer_reader) = framed.split();
-        let receiver_stream = Some(get_stream(peer_reader, peer_manager_rx).await);
+        let receiver_stream = Some(construct_stream(peer_reader, peer_manager_rx).await);
 
         // set up extensions
         let extensions = handshake_recv
@@ -89,7 +99,10 @@ impl Peer {
     }
 }
 
-async fn get_stream(
+/// Creates the stream consisting of
+/// - The receiver of the remote peer itself
+/// - The receiver of the peer manager
+async fn construct_stream(
     framed_rx: PeerReader,
     peer_manager_rx: Receiver<ResMessage>,
 ) -> BoxedMsgStream {
@@ -109,35 +122,30 @@ async fn get_stream(
     });
 
     // this is the stream sent by other connections to peers to send have messages
-    let manager_stream = unfold(peer_manager_rx, |mut rx| async move {
-        let msg = rx.recv().await?;
-        Some((Msg::Manager(msg), rx))
-    });
+    let manager_stream =
+        tokio_stream::wrappers::ReceiverStream::new(peer_manager_rx).map(Msg::Manager);
 
-    let stream = futures_util::stream::select(peer_msg_stream, manager_stream);
+    let stream = tokio_stream::StreamExt::merge(peer_msg_stream, manager_stream);
     Box::pin(stream)
 }
 
+/// wrapper function that maps the result of the sending to our error
 pub(super) async fn send_peer_manager(
     peer_manager_tx: &Sender<ReqMsgFromPeer>,
     msg: ReqMsgFromPeer,
     peer_id: [u8; 20],
 ) -> Result<(), PeerError> {
-    let msg_type = mem::discriminant(&msg.msg);
     peer_manager_tx
         .send(msg)
         .await
-        .map_err(|error| PeerError::SendToPeerManager {
-            error,
-            peer_id,
-            msg_type,
-        })
+        .map_err(|error| PeerError::SendToPeerManager { error, peer_id })
 }
 
-/// this is just a wrapper type for the actual states that wraps it in an Arc
+/// this is just a wrapper type for the actual states that wraps it in an Arc to be able to clone them + Send
 #[derive(Debug, Clone)]
 pub(crate) struct PeerState(pub(crate) Arc<PeerStateInner>);
 
+/// This keeps track of the peer_id, the choking & interested state of both sides, and whats the `reqq` (max request) field in the extension handshake
 #[derive(Debug)]
 pub(crate) struct PeerStateInner {
     /// the peer_id of the remote peer
@@ -190,7 +198,7 @@ type PeerReader = SplitStream<Framed<TcpStream, MessageFramer>>;
 
 impl Drop for Peer {
     fn drop(&mut self) {
-        // send message to peer manager that so removes us
+        // send message to peer manager that so he removes us
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let _ = self.set_interested(false).await;

@@ -9,11 +9,8 @@ use crate::{
     torrent::Metainfo,
 };
 
-#[derive(Debug)]
-pub(super) struct DownloadQueue(pub(super) Vec<PieceState>);
-
 impl PieceManager {
-    /// returns a list of blocks that we want to request
+    /// Returns a list of `n` blocks that we want to request for a given peer by asking the piece selector.
     pub(in crate::peer_manager) fn prepare_next_blocks(
         &mut self,
         piece_selector: &mut PieceSelector,
@@ -21,7 +18,6 @@ impl PieceManager {
         peer_id: &PeerId,
         metainfo: &Metainfo,
     ) -> Option<Vec<RequestPiecePayload>> {
-        // TODO: we only select one piece but if the piece is only 3 blocks big, we can never get to like 255 requests going out
         let mut requests = Vec::with_capacity(n);
         while requests.len() < n
             && let Some(peer_has) = piece_selector.get_peer_has(peer_id)
@@ -48,12 +44,16 @@ impl PieceManager {
     }
 }
 
+/// represents a queue of current pieces we download
+#[derive(Debug)]
+pub(super) struct DownloadQueue(pub(super) Vec<PieceState>);
+
 impl DownloadQueue {
     pub(super) fn new() -> Self {
         Self(Vec::with_capacity(MAX_PIECES_IN_PARALLEL))
     }
 
-    /// looks into the queue if there's a piece that the peer has and returns it
+    /// looks into the queue if there's a piece that the peer has and returns it (if it found one)
     fn get_piece_for_peer(&mut self, peer_has: &[bool]) -> Option<&mut PieceState> {
         // 1. Try if we have something in the download queue
         let piece_i = self.0.iter().position(|state| {
@@ -71,7 +71,8 @@ impl DownloadQueue {
         Some(self.0.get_mut(piece_i).expect("we checked that before"))
     }
 
-    /// really just adds the pieces given into the queue
+    /// Really just adds the pieces given into the queue.
+    /// It also needs the metainfo to calculate how many bytes the piece is.
     pub(in crate::peer_manager) fn add_pieces_to_queue(
         &mut self,
         pieces: Vec<u32>,
@@ -97,6 +98,8 @@ impl PieceState {
         }
     }
 
+    /// Constructs a list of request payloads (block-wise) from a whole piece.
+    /// Filters the one already requested out
     fn prepare_requests_for_piece(&mut self, n: usize) -> Vec<RequestPiecePayload> {
         let n_blocks = self.blocks.capacity() as u32;
         let piece_size = self.buf.capacity() as u32;

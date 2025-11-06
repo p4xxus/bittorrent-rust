@@ -1,3 +1,5 @@
+//! The this is where the piece manager lives. He's responsible for writing the block to a file and creating new requests from Pieces.
+//! He also handles timeouts
 use std::{
     fs::{File, OpenOptions},
     path::PathBuf,
@@ -10,6 +12,8 @@ mod file_manager;
 pub(super) mod piece_selector;
 mod req_preparer;
 
+/// A manager who encapsulates all the stuff relevant for actually downloading pieces and writing them to a file.
+/// You can use [`build`] to create a new one.
 #[derive(Debug)]
 pub(super) struct PieceManager {
     download_queue: DownloadQueue,
@@ -34,6 +38,7 @@ impl PieceManager {
         })
     }
 }
+
 fn get_file(path: PathBuf) -> Result<File, PeerManagerError> {
     // TODO: I'm not sure whether thats the best way
     // so if a file doesn't exist _anymore_ then it will just create a new one, although we may want to fail

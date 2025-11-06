@@ -282,8 +282,7 @@ impl PeerManager {
 fn get_metadata_queue(
     metadata_piece_manager: &mut MetadataPieceManager,
 ) -> Result<Option<ResMessage>, PeerManagerError> {
-    let new_data = metadata_piece_manager
-        .get_block_req_data()
+    let new_data = dbg!(metadata_piece_manager.get_block_req_data())
         .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
 
     if let Some(data) = new_data {

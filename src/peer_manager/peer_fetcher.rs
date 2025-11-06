@@ -6,15 +6,15 @@ use tokio_stream::StreamExt;
 use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::{ClientOptions, PEER_ID},
+    core::tracker::TrackerResponse,
     peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
-    tracker::TrackerResponse,
 };
 
 const DEFAULT_TRACKER_INTERVAL: Duration = Duration::from_secs(120);
 /// specifies after how long we should stop the request to the tracker (ideally before tcp connection timeout occurs)
-const TRACKER_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-const NUM_ENOUGH_PEERS_TO_START: usize = 5;
+const TRACKER_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const NUM_ENOUGH_PEERS_TO_START: usize = 20; // not all of them are reachable
 
 #[derive(Debug)]
 pub(super) struct PeerFetcher {
@@ -46,11 +46,16 @@ impl PeerFetcher {
             println!("Connecting to {addr}");
             let peer_manager_tx = self.tx.clone();
             tokio::spawn(async move {
-                if let Ok(peer) =
-                    Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx).await
-                    && let Err(peer_error) = peer.run().await
-                {
-                    println!("Error occurred when connecting to peer: {peer_error}.");
+                // TODO: error
+                match Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx).await {
+                    Ok(peer) => {
+                        if let Err(peer_error) = peer.run().await {
+                            println!("Error occurred when connecting to peer: {peer_error}.");
+                        }
+                    }
+                    Err(err) => {
+                        println!("{err}")
+                    }
                 }
             });
         }

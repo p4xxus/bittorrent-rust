@@ -1,4 +1,5 @@
 //! This is all for the PeerManager
+//! It contains the types for requesting the metainfo.
 
 use std::time::Duration;
 
@@ -16,6 +17,8 @@ use crate::{
 const METADATA_BLOCK_SIZE: usize = 1 << 14;
 const TIMEOUT_METADATA_REQ: Duration = Duration::from_secs(5);
 
+/// A struct similar to the normal PieceManager that's running before the actual PieceManager.
+/// It's responsible for requesting blocks of metadata and constructing the metainfo itself.
 #[derive(Debug)]
 pub(crate) struct MetadataPieceManager {
     queue: Vec<BlockState>,
@@ -39,9 +42,9 @@ impl MetadataPieceManager {
         self.queue[index as usize] = BlockState::Finished;
     }
 
-    /// returns Ok(None) if we're finished downloading the Metadata
-    /// returns Err(..) if it couldn't serialize the MetadataMsg to bytes
-    /// returns Ok(Bytes) of the data bytes in the BasicExtensionPayload
+    /// - returns Ok(None) if we're finished downloading the Metadata
+    /// - returns Err(..) if it couldn't serialize the MetadataMsg to bytes
+    /// - returns Ok(Bytes) of the data bytes in the BasicExtensionPayload
     pub(crate) fn get_block_req_data(&mut self) -> Result<Option<Bytes>, serde_bencode::Error> {
         let Some(piece_index) = self
             .queue

@@ -1,3 +1,5 @@
+//! Contains common structs to de-/serialize torrent files and everything inside of it (metainfo, infohashes, announce-list).
+
 use std::{fmt::Display, ops::Deref, path::PathBuf};
 
 pub use hashes::Hashes;

@@ -68,7 +68,7 @@ pub trait ExtensionHandler: Send + Sync + std::fmt::Debug {
     fn get_ext_type(&self) -> ExtensionType;
 }
 
-/// Enum that represents the currently supportet Extensions
+/// Enum that represents the currently supported Extensions
 #[derive(Debug, Display, EnumString, Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
 pub enum ExtensionType {
     #[strum(disabled)]
@@ -77,7 +77,7 @@ pub enum ExtensionType {
     Metadata,
 }
 
-// the handshake is always active
 /// List of the active and implemented extensions.
-/// Note, that the index of the ExtensionType in here corresponds to the index of the extended message ID **+ 1**
+/// Note, that the index of the ExtensionType in here corresponds to the index of the extended message ID **plus 1**.
+/// The handshake is always active.
 pub const ACTIVE_EXTENSIONS: &[ExtensionType] = &[ExtensionType::Metadata];

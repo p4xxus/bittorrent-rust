@@ -1,6 +1,6 @@
 use bytes::{Bytes, BytesMut};
 
-pub trait Payload {
+pub(crate) trait Payload {
     fn from_be_bytes(payload: &[u8]) -> Self;
     /// the bytes in BE order without the length & message prefix
     fn to_be_bytes(&self) -> Bytes;

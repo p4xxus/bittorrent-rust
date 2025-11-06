@@ -1,3 +1,5 @@
+//! This module is for all the low-level byte parsing to the corresponding messages.
+
 use bytes::BufMut;
 use bytes::{Buf, Bytes, BytesMut};
 use payloads::*;
@@ -10,6 +12,8 @@ use crate::extensions::BasicExtensionPayload;
 pub(crate) mod client_identifier;
 pub(crate) mod payloads;
 
+/// All the possible messages specified in BEP03
+/// extension messages are available in the [`extensions`] module
 #[derive(Debug, Clone, PartialEq, AsRefStr)]
 pub enum PeerMessage {
     Choke(NoPayload),

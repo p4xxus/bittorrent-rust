@@ -1,3 +1,5 @@
+//! Contains types and method for de-/serializing magnet-links
+
 use std::{net::SocketAddr, str::FromStr};
 
 use thiserror::Error;
@@ -5,13 +7,12 @@ use url::form_urlencoded::Parse;
 
 use crate::torrent::InfoHash;
 
-// mod before_download_manager;
-// mod peer_manager_init;
 pub(crate) mod metadata_msg;
 pub(crate) mod metadata_piece_manager;
 
 const INFO_HASH_PREFIX: &str = "urn:btih";
 
+// this is needed here because of the info_hash_prefix which is only existent in magnet links
 impl FromStr for InfoHash {
     type Err = anyhow::Error;
 

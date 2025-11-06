@@ -1,4 +1,6 @@
-//! This is all for the peer itself
+//! This is all for the peer itself.
+//! So it contains things like handling incoming messages and sending them.
+
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
