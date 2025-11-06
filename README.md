@@ -14,7 +14,7 @@ You cannot seed yet.
 
 - [X] downloading a file from the peers of the tracker found in the .torrent file
 - [X] ok, I added the ut_metadata extension to support magnet_links
-- [ ] seeding a file (partially done if we're already connected to a peer and he asks for a block)
+- [x] seeding a file (I sadly cannot really test it right now though)
 - [X] storing the state of a file to disk so that you can stop a download and continue later
 - [x] periodically requesting the tracker to get peers and shit
 - [ ] choking algorithm
