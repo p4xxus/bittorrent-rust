@@ -7,6 +7,7 @@ mod peer_manager;
 
 pub mod client;
 
+pub use client::ClientOptions;
 pub use core::torrent;
 pub use core::tracker::TrackerRequest;
 pub use extensions::magnet_links;

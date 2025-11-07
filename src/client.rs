@@ -29,9 +29,33 @@ pub struct Client {
     options: ClientOptions,
 }
 
+/// A struct that represents all the possible options for a session (client).
+/// With this you can create a client via the [`build`] method
+///
+/// # Usage
+/// ```rust
+/// # use std::error::Error;
+/// # use std::path::PathBuf;
+/// # #[tokio::main]
+/// # async fn main() -> Result<(), Box<dyn Error>> {
+/// use codecrafters_bittorrent::ClientOptions;
+/// let client = ClientOptions::default()
+///     .continue_download(false)
+///     .build()
+///     .await?;
+///
+/// // You have to `.await` them in order to start download, this is only a doctest, not a bittorrent client
+/// client.add_magnet("some valid magnet link", Some(PathBuf::from("output/path.txt")));
+/// client.add_torrent(&PathBuf::from("torrent_path"), None);
+/// #   Ok(())
+/// # }
+/// ```
+///
 #[derive(Clone, Copy, Debug)]
 pub struct ClientOptions {
+    /// port to listen on
     pub(crate) port: u16,
+    /// ip address to listen on
     pub(crate) ip_addr: IpAddr,
     /// whether to continue downloading previous files
     continue_download: bool,
@@ -126,8 +150,10 @@ impl Client {
         }
     }
 
+    /// Starts downloading a torrent from a path to the torrent file.
+    /// If no output path was provided, it will use the one found in the torrent file.
     pub async fn add_torrent(
-        &mut self,
+        &self,
         torrent_path: &PathBuf,
         output_path: Option<PathBuf>,
     ) -> Result<(), Box<dyn Error>> {
@@ -136,6 +162,8 @@ impl Client {
         Ok(())
     }
 
+    /// Starts downloading a torrent from a valid magnet link.
+    /// If no output path was provided, it will use the one found in the torrent file.
     pub async fn add_magnet(
         &self,
         magnet_link_str: &str,

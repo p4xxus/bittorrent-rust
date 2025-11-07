@@ -31,6 +31,7 @@ pub enum Msg {
     Data(PeerMessage),
     Timeout,
 }
+
 pub struct Peer {
     pub(crate) state: PeerState,
     queue: ReqQueue,
