@@ -135,6 +135,8 @@ impl Peer {
                         }
                         PeerMessage::Interested(_no_payload) => {
                             self.state.0.peer_interested.store(true, Ordering::Relaxed);
+                            // TODO: choking
+                            self.send_peer(PeerMessage::Unchoke(NoPayload)).await?;
                         }
                         PeerMessage::NotInterested(_no_payload) => {
                             self.state.0.peer_interested.store(false, Ordering::Relaxed);
