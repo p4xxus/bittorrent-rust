@@ -145,7 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             output,
             torrent: torrent_path,
         } => {
-            let mut client = ClientOptions::default().build().await?;
+            let client = ClientOptions::default().build().await?;
             client.add_torrent(torrent_path, output.clone()).await?;
 
             std::thread::sleep(std::time::Duration::MAX);

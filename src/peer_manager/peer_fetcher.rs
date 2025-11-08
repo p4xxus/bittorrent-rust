@@ -49,9 +49,7 @@ impl PeerFetcher {
                 // TODO: error
                 match Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx).await {
                     Ok(peer) => {
-                        if let Err(peer_error) = peer.run().await {
-                            println!("Error occurred when connecting to peer: {peer_error}.");
-                        }
+                        peer.run_gracefully(info_hash).await;
                     }
                     Err(err) => {
                         println!("{err}")

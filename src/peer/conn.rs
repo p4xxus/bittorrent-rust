@@ -25,6 +25,9 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::codec::Framed;
 use tokio_util::time::FutureExt;
 
+use crate::events::ApplicationEvent;
+use crate::events::PeerEvent;
+use crate::events::emit_event;
 use crate::messages::{MessageFramer, PeerMessage};
 use crate::peer::DEFAULT_MAX_REQUESTS;
 use crate::peer::Msg;
@@ -190,6 +193,10 @@ impl PeerState {
 
         Ok(peer_manager_rx)
     }
+}
+
+pub(in crate::peer) fn emit_peer_event(peer_event: PeerEvent, info_hash: InfoHash) {
+    emit_event(ApplicationEvent::Peer(peer_event, info_hash));
 }
 
 pub(super) type BoxedMsgStream = Pin<Box<dyn Stream<Item = Msg> + Send + Sync>>;

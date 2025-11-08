@@ -12,12 +12,13 @@ use crate::{
     peer::DEFAULT_MAX_REQUESTS,
     peer_manager::{
         PeerId, PeerManagerReceiverStream, PieceManager, ReqMessage, ResMessage, TorrentState,
-        error::PeerManagerError,
+        emit_session_event, error::PeerManagerError,
     },
     torrent::Metainfo,
 };
 
 impl PeerManager {
+    /// runs the peer manager in the current thread
     pub(crate) async fn run(
         mut self,
         client_options: ClientOptions,
@@ -30,6 +31,11 @@ impl PeerManager {
             peer_manager_stream.next().await,
             Some(PeerManagerReceiverStream::SendTrackerUpdate)
         );
+
+        emit_session_event(crate::events::SessionEvent::NewDownload(
+            self.get_info_hash(),
+        ));
+
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
             match peer_manager_message {
                 PeerManagerReceiverStream::PeerMessage(peer_msg) => {
@@ -292,5 +298,17 @@ fn get_metadata_queue(
         ))))
     } else {
         Ok(None)
+    }
+}
+
+impl Drop for PeerManager {
+    fn drop(&mut self) {
+        // send messages to peers that we're done
+        // TODO: FinishedFile is not the appropriate message here
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let _ = self.broadcast_peers(ResMessage::FinishedFile).await;
+            });
+        });
     }
 }

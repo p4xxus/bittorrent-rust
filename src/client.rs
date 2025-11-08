@@ -8,10 +8,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use tokio::{net::TcpListener as TokioTcpListener, sync::mpsc};
+use tokio::{
+    net::TcpListener as TokioTcpListener,
+    sync::{broadcast, mpsc},
+};
 
 use crate::{
     database::SurrealDbConn,
+    events::{ApplicationEvent, PeerEvent, emit_event, get_receiver},
     magnet_links::MagnetLink,
     peer::initial_handshake::Handshake,
     peer_manager::{PeerManager, ReqMsgFromPeer},
@@ -122,34 +126,6 @@ impl ClientOptions {
 }
 
 impl Client {
-    fn new(options: ClientOptions) -> Result<Self, Box<dyn Error>> {
-        let db_conn = Arc::new(tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(async move { SurrealDbConn::new(DATABASE_NAME).await })
-        })?);
-
-        Ok(Self {
-            db_conn,
-            peer_managers: Arc::new(Mutex::new(HashMap::new())),
-            options,
-        })
-    }
-
-    async fn add_unfinished_torrents_from_db(&self) {
-        let entries = self
-            .db_conn
-            .get_all()
-            .await
-            .into_iter()
-            .filter(|e| !e.is_finished());
-
-        for peer_manager in entries
-            .filter_map(|entry| PeerManager::init_from_entry(Arc::clone(&self.db_conn), entry).ok())
-        {
-            self.start_peer_manager(peer_manager);
-        }
-    }
-
     /// Starts downloading a torrent from a path to the torrent file.
     /// If no output path was provided, it will use the one found in the torrent file.
     pub async fn add_torrent(
@@ -172,6 +148,10 @@ impl Client {
         let magnet_link = MagnetLink::from_url(magnet_link_str)?;
         self.start_download_magnet(magnet_link, output_path).await?;
         Ok(())
+    }
+
+    pub fn subscribe_to_events(&self) -> broadcast::Receiver<ApplicationEvent> {
+        get_receiver()
     }
 
     fn is_already_downloading(&self, info_hash: &InfoHash) -> bool {
@@ -199,6 +179,34 @@ impl Client {
         self.start_peer_manager(peer_manager);
 
         Ok(())
+    }
+
+    fn new(options: ClientOptions) -> Result<Self, Box<dyn Error>> {
+        let db_conn = Arc::new(tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async move { SurrealDbConn::new(DATABASE_NAME).await })
+        })?);
+
+        Ok(Self {
+            db_conn,
+            peer_managers: Arc::new(Mutex::new(HashMap::new())),
+            options,
+        })
+    }
+
+    async fn add_unfinished_torrents_from_db(&self) {
+        let entries = self
+            .db_conn
+            .get_all()
+            .await
+            .into_iter()
+            .filter(|e| !e.is_finished());
+
+        for peer_manager in entries
+            .filter_map(|entry| PeerManager::init_from_entry(Arc::clone(&self.db_conn), entry).ok())
+        {
+            self.start_peer_manager(peer_manager);
+        }
     }
 
     async fn start_download_torrent(
@@ -234,18 +242,13 @@ impl Client {
 
     fn start_peer_manager(&self, peer_manager: PeerManager) {
         let info_hash = peer_manager.get_info_hash();
-        println!("Now down-/uploading file with hash {info_hash}.");
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
         tokio::spawn(async move {
-            peer_managers
-                .lock()
-                .unwrap()
-                .insert(info_hash, peer_manager.get_sender());
             if let Err(err) = peer_manager.run(client_options).await {
-                println!("The peer manager responsible for the hash {info_hash} failed.");
-                println!("REASON:");
-                println!("{err}");
+                emit_event(ApplicationEvent::Session(
+                    crate::events::SessionEvent::DownloadCanceled(info_hash, Arc::new(err)),
+                ));
                 peer_managers.lock().unwrap().remove(&info_hash);
             }
         });
@@ -317,11 +320,12 @@ impl Client {
                     };
                     match get_peer().await {
                         Ok(peer) => {
+                            emit_event(ApplicationEvent::Peer(
+                                PeerEvent::NewConnectionInbound,
+                                handshake_recv.info_hash,
+                            ));
                             tokio::spawn(async move {
-                                if let Err(error) = peer.run().await {
-                                    // TODO: error handling
-                                    println!("Peer closed with the following error: {error}.");
-                                }
+                                peer.run_gracefully(handshake_recv.info_hash).await;
                             });
                         }
                         Err(error) => println!(

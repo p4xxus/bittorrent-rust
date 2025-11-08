@@ -1,5 +1,8 @@
 use futures_util::StreamExt;
-use std::{mem, sync::atomic::Ordering};
+use std::{
+    mem,
+    sync::{Arc, atomic::Ordering},
+};
 
 use crate::{
     extensions::BasicExtensionPayload,
@@ -7,11 +10,24 @@ use crate::{
         PeerMessage,
         payloads::{HavePayload, NoPayload},
     },
-    peer::{Msg, Peer, error::PeerError},
+    peer::{Msg, Peer, conn::emit_peer_event, error::PeerError},
     peer_manager::{ReqMessage, ResMessage},
+    torrent::InfoHash,
 };
 
 impl Peer {
+    /// runs the peer manager in this thread and handles its errors
+    pub async fn run_gracefully(self, info_hash: InfoHash) {
+        emit_peer_event(crate::events::PeerEvent::NewConnectionOutbound, info_hash);
+
+        if let Err(peer_error) = self.run().await {
+            emit_peer_event(
+                crate::events::PeerEvent::Disconnected(Arc::new(peer_error)),
+                info_hash,
+            );
+        }
+    }
+
     pub async fn run(mut self) -> Result<(), PeerError> {
         // TODO: do choking
         self.state.0.am_choking.store(false, Ordering::Relaxed);

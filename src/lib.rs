@@ -1,4 +1,3 @@
-pub mod core;
 mod database;
 mod extensions;
 mod messages;
@@ -6,6 +5,8 @@ mod peer;
 mod peer_manager;
 
 pub mod client;
+pub mod core;
+pub mod events;
 
 pub use client::ClientOptions;
 pub use core::torrent;

@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     database::{DBEntry, SurrealDbConn},
+    events::{SessionEvent, emit_event},
     extensions::{
         ExtensionMessage, ExtensionType,
         magnet_links::{MagnetLink, metadata_piece_manager::MetadataPieceManager},
@@ -243,4 +244,8 @@ impl PeerManager {
     pub fn get_sender(&self) -> mpsc::Sender<ReqMsgFromPeer> {
         self.peer_fetcher.tx.clone()
     }
+}
+
+pub(in crate::peer_manager) fn emit_session_event(session_event: SessionEvent) {
+    emit_event(crate::events::ApplicationEvent::Session(session_event));
 }
