@@ -42,7 +42,7 @@ pub struct Client {
 /// # use std::path::PathBuf;
 /// # #[tokio::main]
 /// # async fn main() -> Result<(), Box<dyn Error>> {
-/// use codecrafters_bittorrent::ClientOptions;
+/// use riptorrent::ClientOptions;
 /// let client = ClientOptions::default()
 ///     .continue_download(false)
 ///     .build()

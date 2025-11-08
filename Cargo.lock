@@ -811,40 +811,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d728cc89cf3aee9ff92b05e62b19ee65a02b5702cff7d5a377e32c6ae29d8d"
 
 [[package]]
-name = "codecrafters-bittorrent"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode 2.0.1",
- "bytes",
- "clap",
- "futures-core",
- "futures-sink",
- "futures-util",
- "hex",
- "rand 0.9.2",
- "regex",
- "reqwest",
- "serde",
- "serde_bencode",
- "serde_bytes",
- "serde_derive",
- "serde_json",
- "serde_repr",
- "serde_urlencoded",
- "sha1",
- "strum 0.27.2",
- "surrealdb",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing-mutex",
- "url",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3095,7 +3061,6 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
- "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
@@ -3173,6 +3138,39 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "riptorrent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode 2.0.1",
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "hex",
+ "rand 0.9.2",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_bencode",
+ "serde_bytes",
+ "serde_derive",
+ "serde_json",
+ "serde_repr",
+ "serde_urlencoded",
+ "sha1",
+ "strum 0.27.2",
+ "surrealdb",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing-mutex",
+ "url",
 ]
 
 [[package]]
@@ -4448,6 +4446,15 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tui-app"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "riptorrent",
+ "tokio",
+]
 
 [[package]]
 name = "tungstenite"

@@ -1,8 +1,7 @@
-use anyhow::Context;
 use clap::{Parser, Subcommand};
-use codecrafters_bittorrent::client::ClientOptions;
+use riptorrent::client::ClientOptions;
 // use codecrafters_bittorrent::magnet_links::MagnetLink;
-use codecrafters_bittorrent::{Peer, TrackerRequest, torrent::Torrent};
+use riptorrent::{Peer, TrackerRequest, torrent::Torrent};
 use std::error::Error;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -61,17 +60,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // You can check for the existence of subcommands, and if found use their
     // matches just as you would the top level cmd
     match &cli.command {
-        DecodeMetadataType::Decode { value } => {
-            let decoded_value: serde_bencode::value::Value =
-                serde_bencode::from_str(value).context("decode bencode")?;
-            println!("{decoded_value:?}");
+        DecodeMetadataType::Decode { value: _ } => {
+            // let decoded_value: serde_bencode::value::Value =
+            //     serde_bencode::from_str(value).context("decode bencode")?;
+            // println!("{decoded_value:?}");
         }
         DecodeMetadataType::Info { torrent } => {
             let torrent = Torrent::read_from_file(torrent)?;
             // println!("Tracker URL: {}", torrent.announce);
             // println!("Length: {}", torrent.get_length());
             let info_hash = torrent.info.info_hash();
-            println!("Info Hash: {}", hex::encode(*info_hash));
+            println!("Info Hash: {}", info_hash);
             println!("Piece Length: {}", torrent.info.piece_length);
             // print everything except the piece hashes
             println!("{:#?}", torrent.info.files);

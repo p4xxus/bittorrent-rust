@@ -1,0 +1,11 @@
+[package]
+name = "tui-app"
+version = "0.1.0"
+edition = "2024"
+authors = ["TheRedHell"]
+resolver = "3"
+
+[dependencies]
+riptorrent = { path = "../riptorrent" }
+clap = { version = "4.0.32", features = ["derive"] } # creating a cli
+tokio = "1.48.0"
