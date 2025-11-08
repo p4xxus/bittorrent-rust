@@ -4,7 +4,11 @@ use std::sync::{Arc, OnceLock};
 
 use tokio::sync::broadcast;
 
-use crate::{peer::error::PeerError, peer_manager::error::PeerManagerError, torrent::InfoHash};
+use crate::{
+    peer::error::PeerError,
+    peer_manager::error::PeerManagerError,
+    torrent::{InfoHash, Metainfo},
+};
 
 // TODO: do we even need multiple subscriber?
 static EVENT_SENDER: OnceLock<broadcast::Sender<ApplicationEvent>> = OnceLock::new();
@@ -27,19 +31,22 @@ pub(super) fn emit_event(event: ApplicationEvent) {
 #[derive(Clone, Debug)]
 pub enum ApplicationEvent {
     Peer(PeerEvent, InfoHash),
-    Session(SessionEvent),
+    Torrent(TorrentEvent, InfoHash),
 }
 
+/// Events that happen for individual peers
 #[derive(Clone, Debug)]
 pub enum PeerEvent {
     NewConnectionInbound,
     NewConnectionOutbound,
-    // TODO: finished piece, finished file, gotLength or sth
     Disconnected(Arc<PeerError>),
 }
 
+/// Events that happen for individual torrents
 #[derive(Clone, Debug)]
-pub enum SessionEvent {
-    NewDownload(InfoHash),
-    DownloadCanceled(InfoHash, Arc<PeerManagerError>),
+pub enum TorrentEvent {
+    NewDownload,
+    GotMetainfo(Metainfo),
+    GotPiece(u32),
+    DownloadCanceled(Arc<PeerManagerError>),
 }

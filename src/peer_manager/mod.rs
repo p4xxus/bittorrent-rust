@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     database::{DBEntry, SurrealDbConn},
-    events::{SessionEvent, emit_event},
+    events::{TorrentEvent, emit_event},
     extensions::{
         ExtensionMessage, ExtensionType,
         magnet_links::{MagnetLink, metadata_piece_manager::MetadataPieceManager},
@@ -44,6 +44,7 @@ pub struct PeerManager {
     rx: Option<mpsc::Receiver<ReqMsgFromPeer>>,
     peers: HashMap<PeerId, PeerConn>,
     piece_selector: PieceSelector,
+    pub info_hash_self: InfoHash,
 }
 
 #[derive(Debug)]
@@ -218,19 +219,7 @@ impl PeerManager {
         let (tx, rx) = mpsc::channel(CHANNEL_SIZE);
         let peer_fetcher = PeerFetcher::new(tx, announce_list);
 
-        Self {
-            torrent_state,
-            rx: Some(rx),
-            peer_fetcher,
-            db_conn,
-            peers: HashMap::new(),
-            piece_selector,
-        }
-    }
-
-    // TODO: we might want to save the InfoHash in the PeerManager itself
-    pub fn get_info_hash(&self) -> InfoHash {
-        match &self.torrent_state {
+        let info_hash_self = match &torrent_state {
             TorrentState::WaitingForMetadata {
                 metadata_piece_manager,
                 ..
@@ -238,6 +227,16 @@ impl PeerManager {
             TorrentState::Downloading { metainfo, .. } => metainfo.info_hash(),
             TorrentState::Seeding { metainfo, .. } => metainfo.info_hash(),
             TorrentState::None => unreachable!("This state is only used for transitioning states"),
+        };
+
+        Self {
+            torrent_state,
+            rx: Some(rx),
+            peer_fetcher,
+            db_conn,
+            peers: HashMap::new(),
+            piece_selector,
+            info_hash_self,
         }
     }
 
@@ -246,6 +245,12 @@ impl PeerManager {
     }
 }
 
-pub(in crate::peer_manager) fn emit_session_event(session_event: SessionEvent) {
-    emit_event(crate::events::ApplicationEvent::Session(session_event));
+pub(in crate::peer_manager) fn emit_torrent_event(
+    torrent_event: TorrentEvent,
+    info_hash: InfoHash,
+) {
+    emit_event(crate::events::ApplicationEvent::Torrent(
+        torrent_event,
+        info_hash,
+    ));
 }

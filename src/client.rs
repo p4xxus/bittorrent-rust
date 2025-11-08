@@ -241,13 +241,14 @@ impl Client {
     }
 
     fn start_peer_manager(&self, peer_manager: PeerManager) {
-        let info_hash = peer_manager.get_info_hash();
+        let info_hash = peer_manager.info_hash_self;
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
         tokio::spawn(async move {
             if let Err(err) = peer_manager.run(client_options).await {
-                emit_event(ApplicationEvent::Session(
-                    crate::events::SessionEvent::DownloadCanceled(info_hash, Arc::new(err)),
+                emit_event(ApplicationEvent::Torrent(
+                    crate::events::TorrentEvent::DownloadCanceled(Arc::new(err)),
+                    info_hash,
                 ));
                 peer_managers.lock().unwrap().remove(&info_hash);
             }

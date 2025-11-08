@@ -12,7 +12,7 @@ use crate::{
     peer::DEFAULT_MAX_REQUESTS,
     peer_manager::{
         PeerId, PeerManagerReceiverStream, PieceManager, ReqMessage, ResMessage, TorrentState,
-        emit_session_event, error::PeerManagerError,
+        emit_torrent_event, error::PeerManagerError,
     },
     torrent::Metainfo,
 };
@@ -32,9 +32,10 @@ impl PeerManager {
             Some(PeerManagerReceiverStream::SendTrackerUpdate)
         );
 
-        emit_session_event(crate::events::SessionEvent::NewDownload(
-            self.get_info_hash(),
-        ));
+        emit_torrent_event(
+            crate::events::TorrentEvent::NewDownload,
+            self.info_hash_self,
+        );
 
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
             match peer_manager_message {
@@ -64,6 +65,12 @@ impl PeerManager {
                             {
                                 let msg = ResMessage::FinishedPiece(piece_index);
                                 eprintln!("Finished piece number {piece_index}.");
+
+                                emit_torrent_event(
+                                    crate::events::TorrentEvent::GotPiece(piece_index),
+                                    self.info_hash_self,
+                                );
+
                                 if self.is_finished() {
                                     self.transition_seeding();
                                     self.broadcast_peers(ResMessage::FinishedFile).await;
@@ -239,12 +246,17 @@ impl PeerManager {
         self.piece_selector
             .update_from_self_have(db_entry.bitfield.to_vec());
         self.torrent_state = TorrentState::Downloading {
-            metainfo: db_entry.torrent_info,
+            metainfo: db_entry.torrent_info.clone(),
             piece_manager,
         };
 
         self.broadcast_peers(ResMessage::StartDownload).await;
         eprintln!("Finished downloading the metainfo.");
+
+        emit_torrent_event(
+            crate::events::TorrentEvent::GotMetainfo(db_entry.torrent_info),
+            self.info_hash_self,
+        );
 
         Ok(())
     }
