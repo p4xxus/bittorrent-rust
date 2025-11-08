@@ -111,7 +111,7 @@ impl PeerFetcher {
 impl PeerManager {
     pub(super) async fn req_tracker_add_peers(&mut self, client_options: &ClientOptions) {
         let left_to_download = self.get_bytes_left_to_download();
-        let info_hash = self.info_hash_self;
+        let info_hash = self.info_hash;
 
         let tracker_request =
             TrackerRequest::new(&info_hash, PEER_ID, client_options.port, left_to_download);

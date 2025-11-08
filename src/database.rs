@@ -25,6 +25,31 @@ pub(crate) struct DBEntry {
     pub(crate) announce_list: AnnounceList,
 }
 
+/// This represents the public struct to use when we want to have access to things like the length of the torrent
+/// in the end the public view onto the DBEntry
+#[derive(Debug, Clone)]
+pub struct FileInfo {
+    /// size of the file(s) in bytes
+    pub size: usize,
+    pub number_pieces: usize,
+    pub file_path: PathBuf,
+    pub bitfield: Vec<bool>,
+}
+
+impl From<DBEntry> for FileInfo {
+    fn from(value: DBEntry) -> Self {
+        let size = value.torrent_info.get_length() as usize;
+        let number_pieces = value.torrent_info.pieces.0.len();
+
+        FileInfo {
+            size,
+            number_pieces,
+            file_path: value.file.to_path_buf(),
+            bitfield: value.bitfield.to_vec(),
+        }
+    }
+}
+
 impl DBEntry {
     fn from_new_file(file_path: PathBuf, info: Metainfo, announce_list: AnnounceList) -> Self {
         let n_pieces = info.pieces.0.len();

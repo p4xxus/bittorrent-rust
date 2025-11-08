@@ -241,7 +241,7 @@ impl Client {
     }
 
     fn start_peer_manager(&self, peer_manager: PeerManager) {
-        let info_hash = peer_manager.info_hash_self;
+        let info_hash = peer_manager.info_hash;
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
         tokio::spawn(async move {

@@ -56,7 +56,6 @@ impl Peer {
             .await
             .map_err(|error| PeerError::FailedToConnect { error, addr })?;
 
-        println!("peer {} initially connected", tcp.peer_addr().unwrap());
         let handshake_recv = Handshake::new(info_hash, peer_id)
             .init_new_connection(&mut tcp)
             .await?;
@@ -73,8 +72,6 @@ impl Peer {
         handshake_recv: Handshake,
         peer_manager_tx: Sender<ReqMsgFromPeer>,
     ) -> Result<Self, PeerError> {
-        println!("peer {} connected", tcp.peer_addr().unwrap());
-
         let peer_state = PeerState::new(handshake_recv.peer_id);
 
         // after the handshake as succeeded we can create the message framer that de- & encodes the messages

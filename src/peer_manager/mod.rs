@@ -44,7 +44,7 @@ pub struct PeerManager {
     rx: Option<mpsc::Receiver<ReqMsgFromPeer>>,
     peers: HashMap<PeerId, PeerConn>,
     piece_selector: PieceSelector,
-    pub info_hash_self: InfoHash,
+    pub info_hash: InfoHash,
 }
 
 #[derive(Debug)]
@@ -178,13 +178,19 @@ impl PeerManager {
         db_conn: Arc<SurrealDbConn>,
         file_entry: DBEntry,
     ) -> Result<Self, PeerManagerError> {
-        let info_hash_hex = file_entry.torrent_info.info_hash().as_hex();
+        let info_hash = file_entry.torrent_info.info_hash();
+        let info_hash_hex = info_hash.as_hex();
         let piece_manager = PieceManager::build(file_entry.file.to_path_buf(), info_hash_hex)?;
+
+        emit_torrent_event(
+            crate::events::TorrentEvent::GotFileInfo(file_entry.clone().into()),
+            info_hash,
+        );
+
         let torrent_state = TorrentState::Downloading {
             metainfo: file_entry.torrent_info,
             piece_manager,
         };
-
         Ok(Self::new(
             torrent_state,
             db_conn,
@@ -236,7 +242,7 @@ impl PeerManager {
             db_conn,
             peers: HashMap::new(),
             piece_selector,
-            info_hash_self,
+            info_hash: info_hash_self,
         }
     }
 

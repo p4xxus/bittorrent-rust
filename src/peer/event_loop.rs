@@ -47,7 +47,7 @@ impl Peer {
                     && p.extension_id == 2
                 {
                 } else {
-                    println!("INCOMING: {message:?}");
+                    // println!("INCOMING: {message:?}");
                 } /*else if let Msg::Manager(ResMessage::NewBlockQueue(_)) = message {
                 dbg!(&message);
                 }*/
@@ -154,10 +154,6 @@ impl Peer {
                                 .await?;
                         }
                         PeerMessage::Piece(response_piece_payload) => {
-                            eprintln!(
-                                "got {}th block in piece {}",
-                                response_piece_payload.begin, response_piece_payload.index
-                            );
                             self.queue.have_sent -= 1;
                             self.send_peer_manager(ReqMessage::GotBlock(response_piece_payload))
                                 .await?;

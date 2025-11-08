@@ -32,10 +32,7 @@ impl PeerManager {
             Some(PeerManagerReceiverStream::SendTrackerUpdate)
         );
 
-        emit_torrent_event(
-            crate::events::TorrentEvent::NewDownload,
-            self.info_hash_self,
-        );
+        emit_torrent_event(crate::events::TorrentEvent::NewDownload, self.info_hash);
 
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
             match peer_manager_message {
@@ -64,16 +61,20 @@ impl PeerManager {
                                     .await?
                             {
                                 let msg = ResMessage::FinishedPiece(piece_index);
-                                eprintln!("Finished piece number {piece_index}.");
+                                // eprintln!("Finished piece number {piece_index}.");
 
                                 emit_torrent_event(
                                     crate::events::TorrentEvent::GotPiece(piece_index),
-                                    self.info_hash_self,
+                                    self.info_hash,
                                 );
 
                                 if self.is_finished() {
                                     self.transition_seeding();
                                     self.broadcast_peers(ResMessage::FinishedFile).await;
+                                    emit_torrent_event(
+                                        crate::events::TorrentEvent::Finished,
+                                        self.info_hash,
+                                    );
                                 }
                                 self.broadcast_peers(msg).await;
                             }
@@ -251,11 +252,12 @@ impl PeerManager {
         };
 
         self.broadcast_peers(ResMessage::StartDownload).await;
-        eprintln!("Finished downloading the metainfo.");
+        // eprintln!("Finished downloading the metainfo.");
 
+        // XXX
         emit_torrent_event(
-            crate::events::TorrentEvent::GotMetainfo(db_entry.torrent_info),
-            self.info_hash_self,
+            crate::events::TorrentEvent::GotFileInfo(db_entry.into()),
+            self.info_hash,
         );
 
         Ok(())

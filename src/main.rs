@@ -159,11 +159,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .build()
                 .await?;
             client.add_magnet(magnet_link, output.clone()).await?;
+            let mut rx = client.subscribe_to_events();
+
+            while let Ok(event) = rx.recv().await {
+                dbg!(event);
+            }
 
             std::thread::sleep(std::time::Duration::MAX);
         }
         DecodeMetadataType::Continue => {
             ClientOptions::default().build().await?;
+
             std::thread::sleep(std::time::Duration::MAX);
         }
     }
