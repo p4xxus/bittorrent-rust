@@ -1,4 +1,3 @@
-mod database;
 mod extensions;
 mod messages;
 mod peer;
@@ -6,6 +5,7 @@ mod peer_manager;
 
 pub mod client;
 pub mod core;
+pub mod database;
 pub mod events;
 
 pub use client::ClientOptions;

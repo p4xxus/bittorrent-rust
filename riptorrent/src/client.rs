@@ -14,7 +14,7 @@ use tokio::{
 };
 
 use crate::{
-    database::SurrealDbConn,
+    database::{FileInfo, SurrealDbConn},
     events::{ApplicationEvent, PeerEvent, emit_event, get_receiver},
     magnet_links::MagnetLink,
     peer::initial_handshake::Handshake,
@@ -96,7 +96,7 @@ impl Default for ClientOptions {
 }
 
 impl ClientOptions {
-    pub async fn build(self) -> Result<Client, Box<dyn Error>> {
+    pub async fn build(self) -> Result<Client, Box<dyn Error + Send + Sync + 'static>> {
         if !self.is_port_free() {
             return Err(Box::new(io::Error::new(
                 io::ErrorKind::AddrInUse,
@@ -107,7 +107,7 @@ impl ClientOptions {
         let client = Client::new(self)?;
 
         if self.continue_download {
-            client.add_unfinished_torrents_from_db().await;
+            client.continue_download_unfinished().await;
         }
 
         client.spawn_listener()?;
@@ -154,6 +154,31 @@ impl Client {
         get_receiver()
     }
 
+    /// Looks into the db, which files are not finished yet and well finishes them.
+    pub async fn continue_download_unfinished(&self) {
+        let entries = self
+            .db_conn
+            .get_all()
+            .await
+            .into_iter()
+            .filter(|e| !e.is_finished());
+
+        for peer_manager in entries
+            .filter_map(|entry| PeerManager::init_from_entry(Arc::clone(&self.db_conn), entry).ok())
+        {
+            self.start_peer_manager(peer_manager);
+        }
+    }
+
+    pub async fn get_all_torrents(&self) -> Vec<FileInfo> {
+        self.db_conn
+            .get_all()
+            .await
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
     fn is_already_downloading(&self, info_hash: &InfoHash) -> bool {
         self.peer_managers.lock().unwrap().contains_key(info_hash)
     }
@@ -181,7 +206,7 @@ impl Client {
         Ok(())
     }
 
-    fn new(options: ClientOptions) -> Result<Self, Box<dyn Error>> {
+    fn new(options: ClientOptions) -> Result<Self, Box<dyn Error + Send + Sync + 'static>> {
         let db_conn = Arc::new(tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
                 .block_on(async move { SurrealDbConn::new(DATABASE_NAME).await })
@@ -192,21 +217,6 @@ impl Client {
             peer_managers: Arc::new(Mutex::new(HashMap::new())),
             options,
         })
-    }
-
-    async fn add_unfinished_torrents_from_db(&self) {
-        let entries = self
-            .db_conn
-            .get_all()
-            .await
-            .into_iter()
-            .filter(|e| !e.is_finished());
-
-        for peer_manager in entries
-            .filter_map(|entry| PeerManager::init_from_entry(Arc::clone(&self.db_conn), entry).ok())
-        {
-            self.start_peer_manager(peer_manager);
-        }
     }
 
     async fn start_download_torrent(
