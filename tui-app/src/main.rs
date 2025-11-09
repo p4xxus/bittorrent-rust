@@ -1,7 +1,6 @@
 use riptorrent::ClientOptions;
 
 use crate::{
-    logging::initialize_logging,
     model::Model,
     render_view::view,
     update::{torrent_event::handle_client_event, update, user_input::handle_user_input},
