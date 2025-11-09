@@ -21,14 +21,8 @@ pub(super) fn render_torrent_list(model: &Model, frame: &mut Frame) {
         let column_layout = Layout::horizontal(Constraint::from_fills([1, 2]));
         let [paragraph_area, gauge_area] = column_layout.areas(area);
 
-        let paragraph = Text::raw(
-            torrent_info
-                .file_path
-                .to_path_buf()
-                .to_str()
-                .expect("it's a fucking utf-8 string")
-                .to_string(),
-        );
+        let mut paragraph = Text::default();
+        paragraph.push_span(torrent_info.file_path.display().to_string());
         let ratio = calculate_torrent_ratio(torrent_info);
         let gauge = Gauge::default()
             .ratio(ratio)

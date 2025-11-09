@@ -107,6 +107,7 @@ pub enum ResMessage {
     StartDownload,
     NewBlockQueue(Vec<RequestPiecePayload>),
     Block(Option<ResponsePiecePayload>),
+    /// if it's none, it's empty (we don't know how many pieces yet)
     WeHave(Option<BitfieldPayload>),
     FinishedPiece(u32),
     FinishedFile,

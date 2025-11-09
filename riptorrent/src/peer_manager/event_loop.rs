@@ -119,15 +119,15 @@ impl PeerManager {
                                 metadata_piece_manager,
                             } = &mut self.torrent_state
                             {
-                                let msg = get_metadata_queue(metadata_piece_manager)?;
-                                if let Some(msg) = msg {
-                                    self.send_peer(peer_msg.peer_id, msg).await;
+                                let req_messages = get_metadata_queue(metadata_piece_manager);
+                                for req_msg in req_messages {
+                                    self.send_peer(peer_msg.peer_id, req_msg).await;
                                 }
                             }
                         }
                         ReqMessage::WhatDoWeHave => {
                             let have = self.piece_selector.get_have();
-                            let have = if have.is_empty() { None } else { Some(have) };
+                            let have = (!have.is_empty()).then_some(have);
                             let msg = ResMessage::WeHave(
                                 have.map(|have| BitfieldPayload::new(have.clone())),
                             );
@@ -294,21 +294,12 @@ impl PeerManager {
 
 /// helper function that get's the new blocks to be added and creates a message of it
 /// it's not really a queue, rather just one message
-fn get_metadata_queue(
-    metadata_piece_manager: &mut MetadataPieceManager,
-) -> Result<Option<ResMessage>, PeerManagerError> {
-    let new_data = metadata_piece_manager
+fn get_metadata_queue(metadata_piece_manager: &mut MetadataPieceManager) -> Vec<ResMessage> {
+    metadata_piece_manager
         .get_block_req_data()
-        .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
-
-    if let Some(data) = new_data {
-        Ok(Some(ResMessage::ExtensionData((
-            ExtensionType::Metadata,
-            data,
-        ))))
-    } else {
-        Ok(None)
-    }
+        .into_iter()
+        .map(|msg_data| ResMessage::ExtensionData((ExtensionType::Metadata, msg_data)))
+        .collect()
 }
 
 impl Drop for PeerManager {

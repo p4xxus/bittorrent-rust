@@ -115,9 +115,7 @@ async fn construct_stream(
                 // we haven't received all the data yet
                 None
             }
-            Ok(Some(Err(e))) => {
-                panic!("Error occurred on PeerReader: {e:?}")
-            }
+            Ok(Some(Err(e))) => Some((Msg::CloseConnection(e.kind()), framed)),
         }
     });
 

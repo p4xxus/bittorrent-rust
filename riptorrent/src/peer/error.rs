@@ -23,7 +23,7 @@ pub enum PeerError {
         peer_id: [u8; 20],
     },
     #[error("The peer unexpectedly disconnected.")]
-    PeerDisconnected,
+    PeerDisconnected(io::ErrorKind),
     #[error("Failed to establish a tcp connection to the address `{addr}` with error: `{error:?}`")]
     FailedToConnect { error: io::Error, addr: SocketAddr },
     #[error(

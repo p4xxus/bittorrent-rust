@@ -89,7 +89,7 @@ impl Peer {
                             // later TODO: implement lazy bitfield?
                             // also we might make this cleaner
                             if let Some(bitfield) = bitfield {
-                                if bitfield.is_finished() && !bitfield.is_empty() {
+                                if bitfield.is_finished() {
                                     self.set_interested(false).await?;
                                 } else {
                                     self.set_interested(true).await?;
@@ -120,7 +120,7 @@ impl Peer {
                             }
                         }
                         ResMessage::StartDownload => {
-                            self.send_peer_manager(ReqMessage::NeedBlockQueue).await?;
+                            self.request_block_queue().await?;
                         }
                     },
                     Msg::Data(message) => match message {
@@ -146,7 +146,7 @@ impl Peer {
                         PeerMessage::Bitfield(bitfield_payload) => {
                             self.send_peer_manager(ReqMessage::PeerBitfield(bitfield_payload))
                                 .await?;
-                            self.send_peer_manager(ReqMessage::NeedBlockQueue).await?;
+                            self.request_block_queue().await?;
                         }
                         PeerMessage::Request(request_piece_payload) => {
                             self.send_peer_manager(ReqMessage::NeedBlock(request_piece_payload))
@@ -166,6 +166,7 @@ impl Peer {
                     Msg::Timeout => {
                         self.send_peer(PeerMessage::KeepAlive(NoPayload)).await?;
                     }
+                    Msg::CloseConnection(error) => break Err(PeerError::PeerDisconnected(error)),
                 }
 
                 // request next blocks
@@ -178,13 +179,22 @@ impl Peer {
                     for req in queue_iter.into_iter() {
                         self.send_peer(req).await?;
                     }
-                    self.send_peer_manager(ReqMessage::NeedBlockQueue).await?;
+                    self.request_block_queue().await?;
                 }
-            } else {
-                break Err(PeerError::PeerDisconnected);
             }
         }?;
+
         self.receiver_stream = Some(receiver_stream);
         Ok(())
+    }
+
+    /// requests the queue if our current one is empty and if we're interested
+    /// ### first, set the interested state
+    async fn request_block_queue(&self) -> Result<(), PeerError> {
+        if self.queue.to_send.is_empty() && self.state.0.am_interested.load(Ordering::Relaxed) {
+            self.send_peer_manager(ReqMessage::NeedBlockQueue).await
+        } else {
+            Ok(())
+        }
     }
 }

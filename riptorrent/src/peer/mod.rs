@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 
@@ -30,6 +31,7 @@ pub enum Msg {
     Manager(ResMessage),
     Data(PeerMessage),
     Timeout,
+    CloseConnection(io::ErrorKind),
 }
 
 pub struct Peer {

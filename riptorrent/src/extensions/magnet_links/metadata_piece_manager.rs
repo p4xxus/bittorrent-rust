@@ -4,7 +4,6 @@
 use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
-use rand::seq::IteratorRandom;
 use sha1::{Digest, Sha1};
 
 use crate::{
@@ -42,37 +41,29 @@ impl MetadataPieceManager {
         self.queue[index as usize] = BlockState::Finished;
     }
 
-    /// - returns Ok(None) if we're finished downloading the Metadata
-    /// - returns Err(..) if it couldn't serialize the MetadataMsg to bytes
-    /// - returns Ok(Bytes) of the data bytes in the BasicExtensionPayload
-    pub(crate) fn get_block_req_data(&mut self) -> Result<Option<Bytes>, serde_bencode::Error> {
-        let Some(piece_index) = self
+    /// returns a Vec of serialized metadata request messages
+    pub(crate) fn get_block_req_data(&mut self) -> Vec<Bytes> {
+        self
             .queue
-            .iter()
-            .position(|i_have| *i_have == BlockState::None)
-            .or_else(|| {
-                self.check_finished().then(|| {
-                    self.queue
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, i_have)| {
-                            matches!(i_have, BlockState::InProcess(_)).then_some(index)
-                        })
-                        .choose(&mut rand::rng())
-                })?
-            })
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(piece_i, i_have)| {
+                if *i_have == BlockState::None
+                    || matches!(i_have, BlockState::InProcess(instant_requested) if instant_requested.elapsed() >= TIMEOUT_METADATA_REQ)
+                {
+                    *i_have = BlockState::InProcess(std::time::Instant::now());
+
+                    Some(Bytes::from_owner(serde_bencode::to_bytes(&MetadataMsg {
+                        msg_type: MetadataMsgType::Request,
+                        piece_index: piece_i as u32,
+                        total_size: None,
+                    }).expect("serializing this should always work")))
+                } else {
+                    None
+                }
+            }).collect()
         // Note that one peer will not get the same request twice since it won't ask for another if it's waiting for the response of one.
         // If it got the response, it won't get the piece again anyways.
-        else {
-            return Ok(None);
-        };
-        self.queue[piece_index] = BlockState::InProcess(std::time::Instant::now());
-        let msg = MetadataMsg {
-            msg_type: MetadataMsgType::Request,
-            piece_index: piece_index as u32,
-            total_size: None,
-        };
-        Ok(Some(serde_bencode::to_bytes(&msg)?.into()))
     }
 
     /// initializes the fields of the MetadataPieceManager (like which blocks are finished)
@@ -179,27 +170,44 @@ mod tests {
         manager.set_len(METADATA_BLOCK_SIZE * 3); // 3 blocks
 
         // Request first block
-        let req_data_0 = manager.get_block_req_data().unwrap().unwrap();
-        assert_eq!(req_data_0, b"d8:msg_typei0e5:piecei0ee".to_vec());
-        let msg_0: MetadataMsg = serde_bencode::from_bytes(&req_data_0).unwrap();
-        assert_eq!(msg_0.msg_type, MetadataMsgType::Request);
-        assert_eq!(msg_0.piece_index, 0);
-        assert_eq!(msg_0.total_size, None);
+        let req_data_0 = manager.get_block_req_data();
+        assert_eq!(
+            req_data_0,
+            vec![
+                Bytes::from_owner(
+                    serde_bencode::to_bytes(&MetadataMsg {
+                        msg_type: MetadataMsgType::Request,
+                        piece_index: 0,
+                        total_size: None
+                    })
+                    .unwrap()
+                ),
+                serde_bencode::to_bytes(&MetadataMsg {
+                    msg_type: MetadataMsgType::Request,
+                    piece_index: 1,
+                    total_size: None
+                })
+                .unwrap()
+                .into(),
+                serde_bencode::to_bytes(&MetadataMsg {
+                    msg_type: MetadataMsgType::Request,
+                    piece_index: 2,
+                    total_size: None
+                })
+                .unwrap()
+                .into()
+            ]
+        );
         assert!(matches!(manager.queue[0], BlockState::InProcess(_)));
-
-        // Request second block
-        let req_data_1 = manager.get_block_req_data().unwrap().unwrap();
-        assert_eq!(req_data_1, b"d8:msg_typei0e5:piecei1ee".to_vec());
-        let msg_1: MetadataMsg = serde_bencode::from_bytes(&req_data_1).unwrap();
-        assert_eq!(msg_1.msg_type, MetadataMsgType::Request);
-        assert_eq!(msg_1.piece_index, 1);
+        assert!(matches!(manager.queue[1], BlockState::InProcess(_)));
+        assert!(matches!(manager.queue[2], BlockState::InProcess(_)));
 
         manager.queue[0] = BlockState::Finished;
         manager.queue[1] = BlockState::Finished;
         manager.queue[2] = BlockState::Finished;
 
-        // Should return None when all blocks are received
-        assert!(manager.get_block_req_data().unwrap().is_none());
+        // Should be empty when all blocks are received
+        assert!(manager.get_block_req_data().is_empty());
     }
 
     #[test]

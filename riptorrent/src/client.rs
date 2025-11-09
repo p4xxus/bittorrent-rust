@@ -41,10 +41,10 @@ pub struct Client {
 /// # use std::error::Error;
 /// # use std::path::PathBuf;
 /// # #[tokio::main]
-/// # async fn main() -> Result<(), Box<dyn Error>> {
+/// # async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 /// use riptorrent::ClientOptions;
 /// let client = ClientOptions::default()
-///     .continue_download(false)
+///     .with_continue_download(false)
 ///     .build()
 ///     .await?;
 ///
