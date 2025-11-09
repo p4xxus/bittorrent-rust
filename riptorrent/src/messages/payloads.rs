@@ -18,7 +18,7 @@ impl BitfieldPayload {
         }
     }
     pub(crate) fn is_empty(&self) -> bool {
-        self.pieces_available.iter().all(|b| !*b)
+        self.pieces_available.is_empty()
     }
     pub(crate) fn is_finished(&self) -> bool {
         self.pieces_available.iter().all(|b| *b)

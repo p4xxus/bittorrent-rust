@@ -89,13 +89,11 @@ impl Peer {
                             // later TODO: implement lazy bitfield?
                             // also we might make this cleaner
                             if let Some(bitfield) = bitfield {
-                                if bitfield.is_finished() {
+                                if bitfield.is_finished() && !bitfield.is_empty() {
                                     self.set_interested(false).await?;
                                 } else {
                                     self.set_interested(true).await?;
-                                    if !bitfield.is_empty() {
-                                        self.send_peer(PeerMessage::Bitfield(bitfield)).await?;
-                                    }
+                                    self.send_peer(PeerMessage::Bitfield(bitfield)).await?;
                                 }
                             } else {
                                 self.set_interested(true).await?;
@@ -130,6 +128,7 @@ impl Peer {
                             self.state.0.peer_choking.store(true, Ordering::Relaxed)
                         }
                         PeerMessage::Unchoke(_no_payload) => {
+                            // dbg!("peer unchokes");
                             self.state.0.peer_choking.store(false, Ordering::Relaxed);
                         }
                         PeerMessage::Interested(_no_payload) => {
@@ -147,6 +146,7 @@ impl Peer {
                         PeerMessage::Bitfield(bitfield_payload) => {
                             self.send_peer_manager(ReqMessage::PeerBitfield(bitfield_payload))
                                 .await?;
+                            self.send_peer_manager(ReqMessage::NeedBlockQueue).await?;
                         }
                         PeerMessage::Request(request_piece_payload) => {
                             self.send_peer_manager(ReqMessage::NeedBlock(request_piece_payload))

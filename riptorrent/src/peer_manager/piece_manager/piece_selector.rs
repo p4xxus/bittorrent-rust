@@ -129,10 +129,12 @@ impl PieceSelector {
             return;
         }
         // this might be the first bitfield we get and so we must update the lengths of the other bitfields
-        self.peer_bitfields
-            .values_mut()
-            .filter(|bitfield| bitfield.is_empty())
-            .for_each(|other_bitfield| other_bitfield.resize(bitfield.len(), false));
+        if self.peer_bitfields.is_empty() {
+            self.peer_bitfields
+                .values_mut()
+                .filter(|bitfield| bitfield.is_empty())
+                .for_each(|other_bitfield| other_bitfield.resize(bitfield.len(), false));
+        }
 
         if let Some(peer_bitfield) = self.peer_bitfields.get_mut(id) {
             *peer_bitfield = bitfield.clone();

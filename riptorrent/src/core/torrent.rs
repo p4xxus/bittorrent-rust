@@ -201,7 +201,12 @@ impl AnnounceList {
     }
 
     pub(crate) fn from_single_tier_list(announces: Vec<url::Url>) -> Self {
-        Self::initiate(vec![announces])
+        Self::initiate(
+            announces
+                .into_iter()
+                .map(|announce| vec![announce])
+                .collect(),
+        )
     }
 
     fn initiate(mut list: Vec<Vec<url::Url>>) -> Self {

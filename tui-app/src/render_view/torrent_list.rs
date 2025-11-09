@@ -29,8 +29,10 @@ pub(super) fn render_torrent_list(model: &Model, frame: &mut Frame) {
                 .expect("it's a fucking utf-8 string")
                 .to_string(),
         );
+        let ratio = calculate_torrent_ratio(torrent_info);
         let gauge = Gauge::default()
-            .ratio(calculate_torrent_ratio(torrent_info))
+            .ratio(ratio)
+            .label((ratio * 100.0).to_string())
             .style(Style::default().add_modifier(Modifier::DIM));
 
         let paragraph_area = center(

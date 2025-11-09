@@ -23,6 +23,7 @@ async fn main() -> color_eyre::Result<()> {
     let torrents = client.get_all_torrents().await;
     let mut model = Model::new(client, torrents);
 
+    // ratatui::restore();
     while model.running {
         terminal.draw(|f| view(&mut model, f))?;
 

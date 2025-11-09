@@ -7,7 +7,7 @@ use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::{ClientOptions, PEER_ID},
     core::tracker::TrackerResponse,
-    peer_manager::{ReqMsgFromPeer, emit_torrent_event},
+    peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
 };
 
@@ -82,20 +82,20 @@ impl PeerFetcher {
         let mut first_response = None;
         let mut peer_list = HashSet::new();
 
-        while let Some((tier, Ok(Some((url_index_in_tier, tracker_response))))) =
-            tracker_responses.next().await
-        {
-            // extend peer list
-            peer_list.extend(tracker_response.get_peers());
+        while let Some(value) = tracker_responses.next().await {
+            if let (tier, Ok(Some((url_index_in_tier, tracker_response)))) = value {
+                // extend peer list
+                peer_list.extend(tracker_response.get_peers());
 
-            // update tier ranking
-            first_response.get_or_insert(tracker_response);
-            let url = tier.remove(url_index_in_tier);
-            tier.insert(0, url);
+                // update tier ranking
+                first_response.get_or_insert(tracker_response);
+                let url = tier.remove(url_index_in_tier);
+                tier.insert(0, url);
 
-            // if we got enough peers, break
-            if peer_list.len() >= NUM_ENOUGH_PEERS_TO_START {
-                break;
+                // if we got enough peers, break
+                if peer_list.len() >= NUM_ENOUGH_PEERS_TO_START {
+                    break;
+                }
             }
         }
 
@@ -130,7 +130,6 @@ impl PeerManager {
             self.peer_fetcher.set_tracker_req_interval(res.interval);
             Ok(())
         } else {
-            emit_torrent_event(crate::events::TorrentEvent::NoTrackerResponse, info_hash);
             Err(io::Error::new(
                 io::ErrorKind::Other,
                 "Couldn't get a valid tracker response",

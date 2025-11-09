@@ -34,7 +34,6 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
         ApplicationEvent::Torrent(torrent_event, info_hash) => match torrent_event {
             riptorrent::events::TorrentEvent::NewDownload => (),
             riptorrent::events::TorrentEvent::GotFileInfo(file_info) => {
-                dbg!(&file_info);
                 model.torrents.insert(file_info.info_hash, file_info.into());
             }
             riptorrent::events::TorrentEvent::GotPiece(piece_i) => {
@@ -46,7 +45,6 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
             }
             riptorrent::events::TorrentEvent::DownloadCanceled(peer_manager_error) => (),
             riptorrent::events::TorrentEvent::Finished => (),
-            riptorrent::events::TorrentEvent::NoTrackerResponse => (),
         },
     }
 }

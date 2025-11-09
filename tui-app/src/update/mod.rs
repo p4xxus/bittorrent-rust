@@ -29,6 +29,7 @@ pub(crate) async fn update(model: &mut Model, msg: Message) {
                     .expect("failed to add magnet link"),
             };
             model.go_to_main_page();
+            // model.running = false;
         }
 
         Message::ApplicationEvent(application_event) => {
