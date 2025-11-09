@@ -13,6 +13,7 @@ use surrealdb::engine::local::RocksDb;
 use thiserror::Error;
 
 use crate::torrent::AnnounceList;
+use crate::torrent::InfoHash;
 use crate::torrent::Metainfo;
 
 /// the actual data stored in the DB
@@ -29,6 +30,7 @@ pub(crate) struct DBEntry {
 /// in the end the public view onto the DBEntry
 #[derive(Debug, Clone)]
 pub struct FileInfo {
+    pub info_hash: InfoHash,
     /// size of the file(s) in bytes
     pub size: usize,
     pub number_pieces: usize,
@@ -42,6 +44,7 @@ impl From<DBEntry> for FileInfo {
         let number_pieces = value.torrent_info.pieces.0.len();
 
         FileInfo {
+            info_hash: value.torrent_info.info_hash(),
             size,
             number_pieces,
             file_path: value.file.to_path_buf(),

@@ -119,7 +119,7 @@ impl ClientOptions {
         TcpListener::bind(SocketAddr::from(*self)).is_ok()
     }
 
-    pub fn continue_download(mut self, continue_download: bool) -> Self {
+    pub fn with_continue_download(mut self, continue_download: bool) -> Self {
         self.continue_download = continue_download;
         self
     }
@@ -261,6 +261,7 @@ impl Client {
                     info_hash,
                 ));
                 peer_managers.lock().unwrap().remove(&info_hash);
+                // TODO: remove from db??
             }
         });
     }
@@ -272,8 +273,6 @@ impl Client {
             tokio::runtime::Handle::current()
                 .block_on(async { TokioTcpListener::bind(socket_addr).await })
         })?;
-
-        println!("Listening on {socket_addr}.");
 
         tokio::spawn(async move {
             while let Ok((mut tcp_stream, _addr)) = tcp_stream.accept().await {
@@ -339,9 +338,7 @@ impl Client {
                                 peer.run_gracefully(handshake_recv.info_hash).await;
                             });
                         }
-                        Err(error) => println!(
-                            "We got an error when trying to initialize a peer who want to connect to us: {error}"
-                        ),
+                        Err(_) => (),
                     }
                 }
             }

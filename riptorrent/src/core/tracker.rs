@@ -74,7 +74,7 @@ impl<'a> TrackerRequest<'a> {
 
         for (index, url) in announce_urls {
             if let Ok(response) = client.get(url).send().await
-                && let Ok(bytes) = dbg!(response.bytes().await)
+                && let Ok(bytes) = response.bytes().await
                 && let Ok(tracker_response) = serde_bencode::from_bytes::<TrackerResponse>(&bytes)
             {
                 return Some((index, tracker_response));

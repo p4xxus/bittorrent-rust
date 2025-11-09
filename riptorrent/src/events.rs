@@ -57,6 +57,7 @@ pub enum PeerEvent {
 #[derive(Clone, Debug)]
 pub enum TorrentEvent {
     NewDownload,
+    NoTrackerResponse,
     /// the naming might be confusing (why not TorrentInfo)
     /// but it's kina like the public view onto a DBEntry
     GotFileInfo(FileInfo),

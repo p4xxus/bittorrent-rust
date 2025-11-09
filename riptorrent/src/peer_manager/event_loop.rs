@@ -144,9 +144,6 @@ impl PeerManager {
                                         piece_index,
                                         data,
                                     } => {
-                                        println!(
-                                            "Received metadata Block with index {piece_index}"
-                                        );
                                         metadata_piece_manager.add_block(piece_index, data);
 
                                         if metadata_piece_manager.check_finished() {
@@ -179,8 +176,7 @@ impl PeerManager {
                     }
                 }
                 PeerManagerReceiverStream::SendTrackerUpdate => {
-                    dbg!("gotta request the tracker");
-                    self.req_tracker_add_peers(&client_options).await;
+                    self.req_tracker_add_peers(&client_options).await?
                 }
             }
         }
@@ -196,7 +192,7 @@ impl PeerManager {
         options: &ClientOptions,
     ) -> io::Result<impl Stream<Item = PeerManagerReceiverStream> + use<>> {
         // we gotta make an initial request to the tracker to construct the stream with the interval
-        self.req_tracker_add_peers(options).await;
+        self.req_tracker_add_peers(&options).await?;
 
         // stream construction
         let peer_stream = ReceiverStream::new(
@@ -254,7 +250,6 @@ impl PeerManager {
         self.broadcast_peers(ResMessage::StartDownload).await;
         // eprintln!("Finished downloading the metainfo.");
 
-        // XXX
         emit_torrent_event(
             crate::events::TorrentEvent::GotFileInfo(db_entry.into()),
             self.info_hash,
@@ -302,7 +297,8 @@ impl PeerManager {
 fn get_metadata_queue(
     metadata_piece_manager: &mut MetadataPieceManager,
 ) -> Result<Option<ResMessage>, PeerManagerError> {
-    let new_data = dbg!(metadata_piece_manager.get_block_req_data())
+    let new_data = metadata_piece_manager
+        .get_block_req_data()
         .map_err(|e| PeerManagerError::Other(Box::new(e)))?;
 
     if let Some(data) = new_data {

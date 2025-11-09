@@ -17,7 +17,6 @@ impl Peer {
     pub(super) async fn send_extended_handshake(&mut self) -> Result<(), PeerError> {
         if self.extensions.lock().unwrap().is_some() {
             let handshake_extension = HandshakeExtension::new();
-            dbg!(&handshake_extension);
             self.send_peer(PeerMessage::Extended(BasicExtensionPayload {
                 extension_id: 0,
                 data: serde_bencode::to_bytes(&handshake_extension)?.into(),
@@ -37,7 +36,6 @@ impl Peer {
             if let Some(extensions) = maybe_extensions {
                 if payload.extension_id == ExtensionType::Handshake as u8 {
                     let handshake = serde_bencode::from_bytes::<HandshakeExtension>(&payload.data)?;
-                    dbg!(&handshake);
                     if let Some(max_req) = handshake.other.reqq {
                         self.state.0.max_req.store(max_req, Ordering::Relaxed);
                     }

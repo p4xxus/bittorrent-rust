@@ -130,7 +130,6 @@ impl Peer {
                             self.state.0.peer_choking.store(true, Ordering::Relaxed)
                         }
                         PeerMessage::Unchoke(_no_payload) => {
-                            eprintln!("PEER UNCHOKES");
                             self.state.0.peer_choking.store(false, Ordering::Relaxed);
                         }
                         PeerMessage::Interested(_no_payload) => {
@@ -159,9 +158,7 @@ impl Peer {
                                 .await?;
                         }
                         PeerMessage::Cancel(_request_piece_payload) => todo!(),
-                        PeerMessage::KeepAlive(_no_payload) => {
-                            eprintln!("he sent a keep alive")
-                        }
+                        PeerMessage::KeepAlive(_no_payload) => {}
                         PeerMessage::Extended(extension_payload) => {
                             self.on_extension_data(extension_payload).await?;
                         }
@@ -181,11 +178,9 @@ impl Peer {
                     for req in queue_iter.into_iter() {
                         self.send_peer(req).await?;
                     }
-                    eprintln!("need queue");
                     self.send_peer_manager(ReqMessage::NeedBlockQueue).await?;
                 }
             } else {
-                eprintln!("peer disconnected");
                 break Err(PeerError::PeerDisconnected);
             }
         }?;

@@ -1,5 +1,5 @@
 use futures_util::FutureExt;
-use std::{collections::HashSet, net::SocketAddr, time::Duration};
+use std::{collections::HashSet, io, net::SocketAddr, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 
@@ -7,7 +7,7 @@ use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::{ClientOptions, PEER_ID},
     core::tracker::TrackerResponse,
-    peer_manager::ReqMsgFromPeer,
+    peer_manager::{ReqMsgFromPeer, emit_torrent_event},
     torrent::{AnnounceList, InfoHash},
 };
 
@@ -43,7 +43,6 @@ impl PeerFetcher {
         addresses: impl IntoIterator<Item = SocketAddr>,
     ) {
         for addr in addresses {
-            println!("Connecting to {addr}");
             let peer_manager_tx = self.tx.clone();
             tokio::spawn(async move {
                 // TODO: error
@@ -51,8 +50,8 @@ impl PeerFetcher {
                     Ok(peer) => {
                         peer.run_gracefully(info_hash).await;
                     }
-                    Err(err) => {
-                        println!("{err}")
+                    Err(_) => {
+                        // eprintln!("{err}")
                     }
                 }
             });
@@ -84,7 +83,7 @@ impl PeerFetcher {
         let mut peer_list = HashSet::new();
 
         while let Some((tier, Ok(Some((url_index_in_tier, tracker_response))))) =
-            dbg!(tracker_responses.next().await)
+            tracker_responses.next().await
         {
             // extend peer list
             peer_list.extend(tracker_response.get_peers());
@@ -109,7 +108,11 @@ impl PeerFetcher {
 }
 
 impl PeerManager {
-    pub(super) async fn req_tracker_add_peers(&mut self, client_options: &ClientOptions) {
+    /// returns whether the request(s) had been successful
+    pub(super) async fn req_tracker_add_peers(
+        &mut self,
+        client_options: &ClientOptions,
+    ) -> io::Result<()> {
         let left_to_download = self.get_bytes_left_to_download();
         let info_hash = self.info_hash;
 
@@ -125,8 +128,13 @@ impl PeerManager {
                 .add_peers_to_manager(info_hash, peers)
                 .await;
             self.peer_fetcher.set_tracker_req_interval(res.interval);
+            Ok(())
         } else {
-            panic!("Could not get a valid response from the tracker.");
+            emit_torrent_event(crate::events::TorrentEvent::NoTrackerResponse, info_hash);
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Couldn't get a valid tracker response",
+            ))
         }
     }
 
