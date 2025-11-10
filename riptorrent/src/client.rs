@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     error::Error,
-    fmt::Display,
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::PathBuf,
@@ -16,10 +15,13 @@ use tracing::{Instrument, error, info, info_span, warn};
 
 use crate::{
     database::{FileInfo, SurrealDbConn},
-    events::{ApplicationEvent, PeerEvent, emit_event, get_receiver},
+    events::{
+        ApplicationEvent, ConnectionType, PeerEvent, emit_peer_event, emit_torrent_event,
+        get_receiver,
+    },
     magnet_links::MagnetLink,
     peer::{error::PeerError, initial_handshake::Handshake},
-    peer_manager::{PeerManager, ReqMsgFromPeer, error::PeerManagerError},
+    peer_manager::{PeerManager, ReqMsgFromPeer},
     torrent::{AnnounceList, InfoHash, Torrent},
 };
 
@@ -256,21 +258,17 @@ impl Client {
         let info_hash = peer_manager.info_hash;
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
-        tokio::spawn(
-            async move {
-                info!("Starting new Peer Manager");
-                if let Err(err) = peer_manager.run(client_options).await {
-                    error!("Peer Manager cancelled the download: {}", err);
-                    emit_event(ApplicationEvent::Torrent(
-                        crate::events::TorrentEvent::DownloadCanceled(Arc::new(err)),
-                        info_hash,
-                    ));
-                    peer_managers.lock().unwrap().remove(&info_hash);
-                    // TODO: remove from db??
-                }
+        tokio::spawn(async move {
+            if let Err(err) = peer_manager.run(client_options).await {
+                error!("Peer Manager cancelled the download: {}", err);
+                emit_torrent_event(
+                    crate::events::TorrentEvent::DownloadCanceled(Arc::new(err)),
+                    info_hash,
+                );
+                peer_managers.lock().unwrap().remove(&info_hash);
+                // TODO: remove from db??
             }
-            .instrument(info_span!("PeerManager", ?info_hash)),
-        );
+        });
     }
 
     fn spawn_listener(&self) -> io::Result<()> {
@@ -340,12 +338,14 @@ impl Client {
                         };
                         match get_peer().await {
                             Ok(peer) => {
-                                emit_event(ApplicationEvent::Peer(
-                                    PeerEvent::NewConnectionInbound,
+                                let connection_type = ConnectionType::Inbound;
+                                emit_peer_event(
+                                    PeerEvent::NewConnection(connection_type.clone()),
                                     handshake_recv.info_hash,
-                                ));
+                                );
                                 tokio::spawn(async move {
-                                    peer.run_gracefully(handshake_recv.info_hash).await;
+                                    peer.run_gracefully(handshake_recv.info_hash, connection_type)
+                                        .await;
                                 });
                             }
                             Err(error) => warn!("Could not construct a peer. {}", error),

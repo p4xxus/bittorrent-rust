@@ -25,13 +25,24 @@ mod extensions;
 pub mod initial_handshake;
 
 /// this enum is used to select between different stream-types a peer can receive
-#[derive(Debug, PartialEq)]
-pub enum Msg {
+#[derive(PartialEq)]
+enum Msg {
     /// this will be sent to other peers in order to announce that it has the piece
     Manager(ResMessage),
     Data(PeerMessage),
     Timeout,
     CloseConnection(io::ErrorKind),
+}
+
+impl Debug for Msg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Manager(arg0) => f.debug_tuple("Manager").field(&arg0.as_ref()).finish(),
+            Self::Data(arg0) => f.debug_tuple("Data").field(&arg0.as_ref()).finish(),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::CloseConnection(arg0) => f.debug_tuple("CloseConnection").field(arg0).finish(),
+        }
+    }
 }
 
 pub struct Peer {

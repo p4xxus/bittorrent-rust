@@ -2,11 +2,13 @@ use futures_util::FutureExt;
 use std::{collections::HashSet, io, net::SocketAddr, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
+use tracing::debug;
 
 use crate::{
     BLOCK_MAX, Peer, PeerManager, TrackerRequest,
     client::{ClientOptions, PEER_ID},
     core::tracker::TrackerResponse,
+    events::{ConnectionType, PeerEvent, emit_peer_event},
     peer_manager::ReqMsgFromPeer,
     torrent::{AnnounceList, InfoHash},
 };
@@ -48,10 +50,15 @@ impl PeerFetcher {
                 // TODO: error
                 match Peer::connect_from_addr(addr, info_hash, *PEER_ID, peer_manager_tx).await {
                     Ok(peer) => {
-                        peer.run_gracefully(info_hash).await;
+                        let connection_type = ConnectionType::Outbound;
+                        emit_peer_event(
+                            PeerEvent::NewConnection(connection_type.clone()),
+                            info_hash,
+                        );
+                        peer.run_gracefully(info_hash, connection_type).await;
                     }
-                    Err(_) => {
-                        // eprintln!("{err}")
+                    Err(error) => {
+                        debug!("Error occurred when trying to initialize peer: {error}");
                     }
                 }
             });

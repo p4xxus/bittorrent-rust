@@ -22,12 +22,23 @@ pub(super) fn get_receiver() -> broadcast::Receiver<ApplicationEvent> {
 }
 
 /// sends an event to the EVENT_SENDER for the application to receive it
-pub(super) fn emit_event(event: ApplicationEvent) {
+fn emit_event(event: ApplicationEvent) {
     if let Some(sender) = EVENT_SENDER.get()
         && let Err(error) = sender.send(event)
     {
         panic!("Error when trying to send to the sender: {error:?}.");
     };
+}
+
+pub(crate) fn emit_peer_event(peer_event: PeerEvent, info_hash: InfoHash) {
+    emit_event(ApplicationEvent::Peer(peer_event, info_hash));
+}
+
+pub(crate) fn emit_torrent_event(torrent_event: TorrentEvent, info_hash: InfoHash) {
+    emit_event(crate::events::ApplicationEvent::Torrent(
+        torrent_event,
+        info_hash,
+    ));
 }
 
 #[derive(Clone)]
@@ -48,9 +59,14 @@ impl Debug for ApplicationEvent {
 /// Events that happen for individual peers
 #[derive(Clone, Debug)]
 pub enum PeerEvent {
-    NewConnectionInbound,
-    NewConnectionOutbound,
-    Disconnected(Arc<PeerError>),
+    NewConnection(ConnectionType),
+    Disconnected(Arc<PeerError>, ConnectionType),
+}
+
+#[derive(Clone, Debug)]
+pub enum ConnectionType {
+    Inbound,
+    Outbound,
 }
 
 /// Events that happen for individual torrents

@@ -21,7 +21,7 @@ impl Deref for InfoHash {
 
 impl Display for InfoHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = self.iter().map(u8::to_string).collect::<String>();
+        let str = format!("{:x}", bytes::Bytes::from_owner(**self));
         f.write_str(&str)
     }
 }

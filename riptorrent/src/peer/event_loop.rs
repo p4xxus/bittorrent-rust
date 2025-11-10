@@ -3,32 +3,36 @@ use std::{
     mem,
     sync::{Arc, atomic::Ordering},
 };
+use tracing::{error, instrument, trace};
 
 use crate::{
+    events::{ConnectionType, emit_peer_event},
     extensions::BasicExtensionPayload,
     messages::{
         PeerMessage,
         payloads::{HavePayload, NoPayload},
     },
-    peer::{Msg, Peer, conn::emit_peer_event, error::PeerError},
+    peer::{Msg, Peer, error::PeerError},
     peer_manager::{ReqMessage, ResMessage},
     torrent::InfoHash,
 };
 
 impl Peer {
     /// runs the peer manager in this thread and handles its errors
-    pub async fn run_gracefully(self, info_hash: InfoHash) {
-        emit_peer_event(crate::events::PeerEvent::NewConnectionOutbound, info_hash);
+    #[instrument(name = "Peer", skip_all ,fields(%info_hash, connection_type))]
+    pub async fn run_gracefully(self, info_hash: InfoHash, connection_type: ConnectionType) {
+        trace!("New connection.");
 
         if let Err(peer_error) = self.run().await {
+            error!("Peer quit: {peer_error}");
             emit_peer_event(
-                crate::events::PeerEvent::Disconnected(Arc::new(peer_error)),
+                crate::events::PeerEvent::Disconnected(Arc::new(peer_error), connection_type),
                 info_hash,
             );
         }
     }
 
-    pub async fn run(mut self) -> Result<(), PeerError> {
+    async fn run(mut self) -> Result<(), PeerError> {
         // TODO: do choking
         self.state.0.am_choking.store(false, Ordering::Relaxed);
 
@@ -42,15 +46,7 @@ impl Peer {
         self.send_peer_manager(ReqMessage::WhatDoWeHave).await?;
         loop {
             if let Some(message) = receiver_stream.next().await {
-                if let Msg::Data(PeerMessage::Piece(_)) = message {
-                } else if let Msg::Data(PeerMessage::Extended(ref p)) = message
-                    && p.extension_id == 2
-                {
-                } else {
-                    // println!("INCOMING: {message:?}");
-                } /*else if let Msg::Manager(ResMessage::NewBlockQueue(_)) = message {
-                dbg!(&message);
-                }*/
+                // debug!("INCOMING: {message:?}");
                 match message {
                     Msg::Manager(peer_msg) => match peer_msg {
                         ResMessage::FinishedFile => {
