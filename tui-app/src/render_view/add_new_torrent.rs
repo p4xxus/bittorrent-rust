@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Position},
+    layout::{Constraint, Position, Rect},
     style::Stylize,
     widgets::{Block, Clear, Paragraph, Wrap},
 };
@@ -8,9 +8,14 @@ use tui_input::Input;
 
 use crate::{model::Model, render_view::common::center};
 
-pub(super) fn render_add_torrent_popup(_: &Model, frame: &mut Frame, input: &Input) {
+pub(super) fn render_add_torrent_popup(
+    _: &Model,
+    frame: &mut Frame,
+    viewport: Rect,
+    input: &Input,
+) {
     let area = center(
-        frame.area(),
+        viewport,
         Constraint::Percentage(50),
         Constraint::Percentage(20), // top and bottom border + content
     );

@@ -3,11 +3,12 @@
 use std::{collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc, time::Duration};
 
 use bytes::{Bytes, BytesMut};
+use strum::AsRefStr;
 use tokio::sync::mpsc;
 
 use crate::{
     database::{DBEntry, SurrealDbConn},
-    events::{TorrentEvent, emit_event},
+    events::emit_torrent_event,
     extensions::{
         ExtensionMessage, ExtensionType,
         magnet_links::{MagnetLink, metadata_piece_manager::MetadataPieceManager},
@@ -96,12 +97,8 @@ enum PeerManagerReceiverStream {
     SendTrackerUpdate,
 }
 
-// TODO Next-up:
-//  - rarest-first-piece-selection
-//  - choking: 4 active downloaders
-
 /// A message sent to the peer
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, AsRefStr)]
 pub enum ResMessage {
     /// indication to the peer to start the download loop
     StartDownload,
@@ -250,14 +247,4 @@ impl PeerManager {
     pub fn get_sender(&self) -> mpsc::Sender<ReqMsgFromPeer> {
         self.peer_fetcher.tx.clone()
     }
-}
-
-pub(in crate::peer_manager) fn emit_torrent_event(
-    torrent_event: TorrentEvent,
-    info_hash: InfoHash,
-) {
-    emit_event(crate::events::ApplicationEvent::Torrent(
-        torrent_event,
-        info_hash,
-    ));
 }

@@ -1,4 +1,5 @@
 use riptorrent::ClientOptions;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
     model::Model,
@@ -13,6 +14,12 @@ mod update;
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     let mut terminal = ratatui::init();
+    tracing_subscriber::registry()
+        .with(tui_logger::TuiTracingSubscriberLayer)
+        .init();
+    tui_logger::init_logger(tui_logger::LevelFilter::Info)?;
+    tui_logger::set_default_level(log::LevelFilter::Trace);
+    tui_logger::set_env_filter_from_string("riptorrent");
 
     let client = ClientOptions::default()
         .build()
@@ -23,7 +30,6 @@ async fn main() -> color_eyre::Result<()> {
     let torrents = client.get_all_torrents().await;
     let mut model = Model::new(client, torrents);
 
-    // ratatui::restore();
     while model.running {
         terminal.draw(|f| view(&mut model, f))?;
 

@@ -17,18 +17,30 @@ pub fn handle_client_event(
 pub(super) fn update_from_application_event(model: &mut Model, event: ApplicationEvent) {
     match event {
         ApplicationEvent::Peer(peer_event, info_hash) => match peer_event {
-            riptorrent::events::PeerEvent::NewConnectionInbound => {
+            riptorrent::events::PeerEvent::NewConnection(connection_type) => {
                 if let Some(torrent) = model.torrents.get_mut(&info_hash) {
-                    torrent.peer_connections.increase_inbound(1);
+                    match connection_type {
+                        riptorrent::events::ConnectionType::Inbound => {
+                            torrent.peer_connections.increase_inbound(1)
+                        }
+                        riptorrent::events::ConnectionType::Outbound => {
+                            torrent.peer_connections.increase_outbound(1)
+                        }
+                    }
                 }
             }
-            riptorrent::events::PeerEvent::NewConnectionOutbound => {
+            riptorrent::events::PeerEvent::Disconnected(peer_error, connection_type) => {
                 if let Some(torrent) = model.torrents.get_mut(&info_hash) {
-                    torrent.peer_connections.increase_outbound(1);
+                    match connection_type {
+                        riptorrent::events::ConnectionType::Inbound => {
+                            torrent.peer_connections.increase_inbound(1)
+                        }
+                        riptorrent::events::ConnectionType::Outbound => {
+                            torrent.peer_connections.increase_outbound(1)
+                        }
+                    }
                 }
             }
-            // TODO
-            riptorrent::events::PeerEvent::Disconnected(peer_error) => (),
         },
 
         ApplicationEvent::Torrent(torrent_event, info_hash) => match torrent_event {

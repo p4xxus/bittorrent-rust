@@ -2,6 +2,7 @@ use std::{io, path::PathBuf};
 
 use futures_core::Stream;
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use tracing::{info, instrument, trace};
 
 use crate::{
     PeerManager,
@@ -19,6 +20,7 @@ use crate::{
 
 impl PeerManager {
     /// runs the peer manager in the current thread
+    #[instrument(name = "Peer Manager", skip_all, fields(%self.info_hash))]
     pub(crate) async fn run(
         mut self,
         client_options: ClientOptions,
@@ -33,6 +35,7 @@ impl PeerManager {
         );
 
         emit_torrent_event(crate::events::TorrentEvent::NewDownload, self.info_hash);
+        info!("Starting new download");
 
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
             match peer_manager_message {
@@ -63,6 +66,7 @@ impl PeerManager {
                                 let msg = ResMessage::FinishedPiece(piece_index);
                                 // eprintln!("Finished piece number {piece_index}.");
 
+                                trace!("Got piece number {piece_index}");
                                 emit_torrent_event(
                                     crate::events::TorrentEvent::GotPiece(piece_index),
                                     self.info_hash,
@@ -71,6 +75,7 @@ impl PeerManager {
                                 if self.is_finished() {
                                     self.transition_seeding();
                                     self.broadcast_peers(ResMessage::FinishedFile).await;
+                                    info!("Finished file.");
                                     emit_torrent_event(
                                         crate::events::TorrentEvent::Finished,
                                         self.info_hash,
@@ -149,8 +154,10 @@ impl PeerManager {
                                         if metadata_piece_manager.check_finished() {
                                             let file_path = file_path.clone();
                                             let metainfo = metadata_piece_manager
-                                        .get_metadata()
-                                        .expect("This shouldn't fail since we checked that the hashes match.");
+                                                .get_metadata()
+                                                .expect("This shouldn't fail since we checked that the hashes match.");
+
+                                            info!("Got metadata, transitioning to download-state.");
                                             self.transition_downloading(metainfo, file_path)
                                                 .await?;
                                         }
@@ -176,6 +183,7 @@ impl PeerManager {
                     }
                 }
                 PeerManagerReceiverStream::SendTrackerUpdate => {
+                    trace!("Having to re-request the tracker");
                     self.req_tracker_add_peers(&client_options).await?
                 }
             }

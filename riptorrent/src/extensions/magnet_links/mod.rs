@@ -3,6 +3,8 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use thiserror::Error;
+use tracing::error;
+use tracing::instrument;
 use url::form_urlencoded::Parse;
 
 use crate::torrent::InfoHash;
@@ -42,9 +44,11 @@ pub struct MagnetLink {
 }
 
 impl MagnetLink {
+    #[instrument(name = "parsing magnet link")]
     pub fn from_url(url: &str) -> Result<Self, MagnetLinkError> {
         let url = url::Url::parse(url)?;
         if url.scheme() != "magnet" {
+            error!("Invalid scheme");
             return Err(MagnetLinkError::NoMagnetLink);
         }
 
@@ -86,11 +90,13 @@ impl MagnetLink {
         }
 
         if trackers.is_empty() {
+            error!("No tracker list in url");
             return Err(MagnetLinkError::NoTrackerUrl);
         }
-        let info_hash = info_hash.ok_or(MagnetLinkError::InvalidInfoHash(anyhow::anyhow!(
-            "No info hash provided."
-        )))?;
+        let info_hash = info_hash.ok_or_else(|| {
+            error!("No info hash in torrent");
+            return MagnetLinkError::InvalidInfoHash(anyhow::anyhow!("No info hash provided."));
+        })?;
         Ok(Self {
             info_hash,
             trackers,

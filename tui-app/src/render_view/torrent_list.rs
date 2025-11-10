@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::Text,
     widgets::Gauge,
@@ -11,10 +11,10 @@ use crate::{
     render_view::common::center,
 };
 
-pub(super) fn render_torrent_list(model: &Model, frame: &mut Frame) {
+pub(super) fn render_torrent_list(model: &Model, frame: &mut Frame, viewport: Rect) {
     let row_layout = Layout::vertical(vec![Constraint::Length(5); model.torrents.values().count()])
         .margin(2)
-        .split(frame.area());
+        .split(viewport);
 
     for (index, torrent_info) in model.torrents.values().enumerate() {
         let area = row_layout[index];
