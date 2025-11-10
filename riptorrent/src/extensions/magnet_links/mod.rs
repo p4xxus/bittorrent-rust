@@ -110,8 +110,6 @@ pub enum MagnetLinkError {
     NoQueryFound,
     #[error("Failed to deserialize the info-hash")]
     InvalidInfoHash(#[from] anyhow::Error),
-    #[error("Failed to deserialize the query in the link with the error: `{0}`")]
-    FailedToDesQuery(#[from] serde_urlencoded::de::Error),
     #[error("downloading from a magnetlink without a provided tracker url isn't supported")]
     NoTrackerUrl,
 }
