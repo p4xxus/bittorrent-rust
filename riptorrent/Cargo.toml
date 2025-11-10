@@ -29,3 +29,4 @@ tokio-util = { version = "0.7.16", features = ["full"] }
 url = { version = "2.5.7", default-features = false }
 strum = { version = "0.27.2", features = ["derive"] }
 tokio-stream = { version = "0.1.17", features = ["net", "time"] }
+tracing = "0.1.41"

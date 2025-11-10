@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddr};
+use std::{error::Error, io, net::SocketAddr};
 
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -38,4 +38,6 @@ pub enum PeerError {
     BenCoding(#[from] serde_bencode::Error),
     #[error("The InfoHash does not match")]
     InfoHashMismatch,
+    #[error("Some other error occurred on the peer")]
+    Other(Box<dyn Error + Send + Sync + 'static>),
 }

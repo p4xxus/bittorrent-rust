@@ -12,13 +12,14 @@ use tokio::{
     net::TcpListener as TokioTcpListener,
     sync::{broadcast, mpsc},
 };
+use tracing::{Instrument, error, info, info_span, warn};
 
 use crate::{
     database::{FileInfo, SurrealDbConn},
     events::{ApplicationEvent, PeerEvent, emit_event, get_receiver},
     magnet_links::MagnetLink,
-    peer::initial_handshake::Handshake,
-    peer_manager::{PeerManager, ReqMsgFromPeer},
+    peer::{error::PeerError, initial_handshake::Handshake},
+    peer_manager::{PeerManager, ReqMsgFromPeer, error::PeerManagerError},
     torrent::{AnnounceList, InfoHash, Torrent},
 };
 
@@ -105,6 +106,7 @@ impl ClientOptions {
         }
 
         let client = Client::new(self)?;
+        info!("Application started");
 
         if self.continue_download {
             client.continue_download_unfinished().await;
@@ -254,16 +256,21 @@ impl Client {
         let info_hash = peer_manager.info_hash;
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
-        tokio::spawn(async move {
-            if let Err(err) = peer_manager.run(client_options).await {
-                emit_event(ApplicationEvent::Torrent(
-                    crate::events::TorrentEvent::DownloadCanceled(Arc::new(err)),
-                    info_hash,
-                ));
-                peer_managers.lock().unwrap().remove(&info_hash);
-                // TODO: remove from db??
+        tokio::spawn(
+            async move {
+                info!("Starting new Peer Manager");
+                if let Err(err) = peer_manager.run(client_options).await {
+                    error!("Peer Manager cancelled the download: {}", err);
+                    emit_event(ApplicationEvent::Torrent(
+                        crate::events::TorrentEvent::DownloadCanceled(Arc::new(err)),
+                        info_hash,
+                    ));
+                    peer_managers.lock().unwrap().remove(&info_hash);
+                    // TODO: remove from db??
+                }
             }
-        });
+            .instrument(info_span!("PeerManager", ?info_hash)),
+        );
     }
 
     fn spawn_listener(&self) -> io::Result<()> {
@@ -274,83 +281,83 @@ impl Client {
                 .block_on(async { TokioTcpListener::bind(socket_addr).await })
         })?;
 
-        tokio::spawn(async move {
-            while let Ok((mut tcp_stream, _addr)) = tcp_stream.accept().await {
-                if let Ok(handshake_recv) =
-                    Handshake::retrieve_new_connection(&mut tcp_stream).await
-                {
-                    let peer_manager_tx = client
-                        .peer_managers
-                        .lock()
-                        .unwrap()
-                        .get(&handshake_recv.info_hash)
-                        .cloned();
+        tokio::spawn(
+            async move {
+                while let Ok((mut tcp_stream, _addr)) = tcp_stream.accept().await {
+                    if let Ok(handshake_recv) =
+                        Handshake::retrieve_new_connection(&mut tcp_stream).await
+                    {
+                        let peer_manager_tx = client
+                            .peer_managers
+                            .lock()
+                            .unwrap()
+                            .get(&handshake_recv.info_hash)
+                            .cloned();
 
-                    let get_peer = async || {
-                        return match peer_manager_tx {
-                            // first, do we already have a peer_manager running for this torrent?
-                            Some(peer_manager_tx) => crate::Peer::new_from_stream(
-                                tcp_stream,
-                                handshake_recv,
-                                peer_manager_tx.clone(),
-                            )
-                            .await
-                            .map_err(stringify),
-
-                            // No, then we might still have the file but just not a peer manager
-                            None => {
-                                // TODO: 2x error handling
-                                if let Some(entry) = client
-                                    .db_conn
-                                    .get_entry(&handshake_recv.info_hash.as_hex())
-                                    .await
-                                    .map_err(stringify)?
-                                {
-                                    let peer_manager = PeerManager::init_from_entry(
-                                        Arc::clone(&client.db_conn),
-                                        entry,
-                                    )
-                                    .map_err(stringify)?;
-                                    let peer_manager_tx = peer_manager.get_sender();
-
-                                    client.start_peer_manager(peer_manager);
-
+                        let get_peer = async || {
+                            return match peer_manager_tx {
+                                // first, do we already have a peer_manager running for this torrent?
+                                Some(peer_manager_tx) => {
                                     crate::Peer::new_from_stream(
                                         tcp_stream,
                                         handshake_recv,
-                                        peer_manager_tx,
+                                        peer_manager_tx.clone(),
                                     )
                                     .await
-                                    .map_err(stringify)
-                                } else {
-                                    Err("A peer want something, we don't have D:<".to_string())
                                 }
-                            }
+
+                                // No, then we might still have the file but just not a peer manager
+                                None => {
+                                    // TODO: 2x error handling
+                                    if let Some(entry) = client
+                                        .db_conn
+                                        .get_entry(&handshake_recv.info_hash.as_hex())
+                                        .await
+                                        .map_err(|db_error| PeerError::Other(db_error.into()))?
+                                    {
+                                        let peer_manager = PeerManager::init_from_entry(
+                                            Arc::clone(&client.db_conn),
+                                            entry,
+                                        )
+                                        .map_err(|e| PeerError::Other(e.into()))?;
+                                        let peer_manager_tx = peer_manager.get_sender();
+
+                                        client.start_peer_manager(peer_manager);
+
+                                        crate::Peer::new_from_stream(
+                                            tcp_stream,
+                                            handshake_recv,
+                                            peer_manager_tx,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(PeerError::Other(
+                                            "A peer want something, we don't have D:<".into(),
+                                        ))
+                                    }
+                                }
+                            };
                         };
-                    };
-                    match get_peer().await {
-                        Ok(peer) => {
-                            emit_event(ApplicationEvent::Peer(
-                                PeerEvent::NewConnectionInbound,
-                                handshake_recv.info_hash,
-                            ));
-                            tokio::spawn(async move {
-                                peer.run_gracefully(handshake_recv.info_hash).await;
-                            });
+                        match get_peer().await {
+                            Ok(peer) => {
+                                emit_event(ApplicationEvent::Peer(
+                                    PeerEvent::NewConnectionInbound,
+                                    handshake_recv.info_hash,
+                                ));
+                                tokio::spawn(async move {
+                                    peer.run_gracefully(handshake_recv.info_hash).await;
+                                });
+                            }
+                            Err(error) => warn!("Could not construct a peer. {}", error),
                         }
-                        Err(_) => (),
                     }
                 }
             }
-        });
+            .instrument(info_span!("Peer listener", %socket_addr)),
+        );
 
         Ok(())
     }
-}
-
-/// temporary error handling
-fn stringify(error: impl Display) -> String {
-    format!("Got error: {error}.")
 }
 
 pub mod errors {
