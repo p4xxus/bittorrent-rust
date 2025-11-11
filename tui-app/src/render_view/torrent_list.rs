@@ -1,10 +1,8 @@
-use color_eyre::owo_colors::colors::Red;
-use log::info;
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect, Spacing},
-    style::{Color, Modifier, Style, Styled, Stylize},
-    text::{Span, Text},
+    style::{Color, Modifier, Style, Stylize},
+    text::Span,
     widgets::{Gauge, Paragraph, Wrap},
 };
 

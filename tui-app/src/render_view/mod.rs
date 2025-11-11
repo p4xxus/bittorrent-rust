@@ -16,7 +16,7 @@ mod common;
 mod logger;
 mod torrent_list;
 
-pub fn view(model: &Model, frame: &mut Frame) {
+pub fn render_view(model: &Model, frame: &mut Frame) {
     // realistically it should be one above
     let horizontal_layout = Layout::horizontal(vec![Constraint::Fill(1), Constraint::Fill(1)])
         .margin(2)
