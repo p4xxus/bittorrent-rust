@@ -48,5 +48,8 @@ fn get_file(path: PathBuf) -> Result<File, PeerManagerError> {
         .append(true)
         .truncate(false)
         .open(&path)
-        .map_err(|error| PeerManagerError::OpenError { path, error })
+        .map_err(|error| PeerManagerError::OpenError {
+            path,
+            error: error.kind(),
+        })
 }

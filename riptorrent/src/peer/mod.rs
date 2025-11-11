@@ -80,7 +80,7 @@ impl Peer {
             .send(msg)
             .await
             .map_err(|error| PeerError::SendToPeer {
-                error,
+                error: error.kind(),
                 peer_id: self.get_id(),
                 msg_type_str,
             })

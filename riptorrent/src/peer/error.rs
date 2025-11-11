@@ -11,7 +11,7 @@ pub enum PeerError {
         "Failed to send a message with type {msg_type_str} to a remote peer with the id: `{peer_id:?}` with the error: `{error}`."
     )]
     SendToPeer {
-        error: io::Error,
+        error: io::ErrorKind,
         peer_id: [u8; 20],
         msg_type_str: String,
     },
@@ -25,11 +25,14 @@ pub enum PeerError {
     #[error("The peer unexpectedly disconnected.")]
     PeerDisconnected(io::ErrorKind),
     #[error("Failed to establish a tcp connection to the address `{addr}` with error: `{error:?}`")]
-    FailedToConnect { error: io::Error, addr: SocketAddr },
+    FailedToConnect {
+        error: io::ErrorKind,
+        addr: SocketAddr,
+    },
     #[error(
         "Failed to read the bytes from the remote peer needed for the handshake with the error: `{0}`."
     )]
-    RecvHandshake(io::Error),
+    RecvHandshake(io::ErrorKind),
     #[error("Failed to decode the handshake received from the peer with the error: `{0}`")]
     DecodeHandshake(#[from] bincode::error::DecodeError),
     #[error("Failed to encode the handshake to send to the peer with the error: `{0}`")]

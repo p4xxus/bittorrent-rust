@@ -16,7 +16,7 @@ pub enum PeerManagerError {
     #[error("The request-manager failed with the following magnet-link error: {0}")]
     MagnetLink(#[from] MagnetLinkError),
     #[error("Failed to open the file at the path `{path}` with the error: `{error}`")]
-    OpenError { path: PathBuf, error: io::Error },
+    OpenError { path: PathBuf, error: io::ErrorKind },
     #[error(
         "Failed to send a message: `{msg}` to peer with ID {peer_id:?} with the error: `{error}`"
     )]

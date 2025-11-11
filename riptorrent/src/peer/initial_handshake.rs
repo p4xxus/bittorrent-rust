@@ -83,7 +83,7 @@ async fn write_bytes(
     tcp.write_all(&handshake_bytes)
         .await
         .map_err(|error| PeerError::SendToPeer {
-            error,
+            error: error.kind(),
             peer_id: handshake.peer_id,
             msg_type_str: "Handshake".to_string(),
         })?;
@@ -98,7 +98,7 @@ async fn read_bytes(
     let mut handshake_bytes = [0_u8; HANDSHAKE_LEN];
     tcp.read_exact(&mut handshake_bytes)
         .await
-        .map_err(PeerError::RecvHandshake)?;
+        .map_err(|e| PeerError::RecvHandshake(e.kind()))?;
 
     let (handshake_recv, len) =
         bincode::decode_from_slice::<Handshake, _>(&handshake_bytes, config)?;

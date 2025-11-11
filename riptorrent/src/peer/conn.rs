@@ -51,7 +51,10 @@ impl Peer {
         // set up tcp connection & shake hands
         let mut tcp = tokio::net::TcpStream::connect(addr)
             .await
-            .map_err(|error| PeerError::FailedToConnect { error, addr })?;
+            .map_err(|error| PeerError::FailedToConnect {
+                error: error.kind(),
+                addr,
+            })?;
 
         let handshake_recv = Handshake::new(info_hash, peer_id)
             .init_new_connection(&mut tcp)
