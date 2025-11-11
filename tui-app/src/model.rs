@@ -31,7 +31,6 @@ impl Model {
 pub struct TorrentInfo {
     /// size of the file(s) in bytes
     pub size: usize,
-    pub number_pieces: usize,
     pub file_path: PathBuf,
     pub bitfield: Vec<bool>,
     pub peer_connections: PeerConnections,
@@ -47,11 +46,16 @@ impl From<FileInfo> for TorrentInfo {
     fn from(value: FileInfo) -> Self {
         TorrentInfo {
             size: value.size,
-            number_pieces: value.number_pieces,
             file_path: value.file_path,
             bitfield: value.bitfield,
             ..Default::default()
         }
+    }
+}
+
+impl TorrentInfo {
+    pub fn num_pieces(&self) -> usize {
+        self.bitfield.len()
     }
 }
 
@@ -65,6 +69,14 @@ impl Default for PeerConnections {
 }
 
 impl PeerConnections {
+    pub fn inbound(&self) -> u8 {
+        self.inbound
+    }
+
+    pub fn outbound(&self) -> u8 {
+        self.outbound
+    }
+
     pub fn increase_inbound(&mut self, i: i8) {
         self.inbound = self.inbound.saturating_add_signed(i)
     }

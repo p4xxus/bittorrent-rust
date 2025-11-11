@@ -29,14 +29,14 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
                     }
                 }
             }
-            riptorrent::events::PeerEvent::Disconnected(peer_error, connection_type) => {
+            riptorrent::events::PeerEvent::Disconnected(_, connection_type) => {
                 if let Some(torrent) = model.torrents.get_mut(&info_hash) {
                     match connection_type {
                         riptorrent::events::ConnectionType::Inbound => {
-                            torrent.peer_connections.increase_inbound(1)
+                            torrent.peer_connections.increase_inbound(-1)
                         }
                         riptorrent::events::ConnectionType::Outbound => {
-                            torrent.peer_connections.increase_outbound(1)
+                            torrent.peer_connections.increase_outbound(-1)
                         }
                     }
                 }

@@ -33,7 +33,8 @@ pub struct FileInfo {
     pub info_hash: InfoHash,
     /// size of the file(s) in bytes
     pub size: usize,
-    pub number_pieces: usize,
+    /// number of bytes in each piece
+    pub piece_size: u32,
     pub file_path: PathBuf,
     pub bitfield: Vec<bool>,
 }
@@ -41,12 +42,12 @@ pub struct FileInfo {
 impl From<DBEntry> for FileInfo {
     fn from(value: DBEntry) -> Self {
         let size = value.torrent_info.get_length() as usize;
-        let number_pieces = value.torrent_info.pieces.0.len();
+        let piece_size = value.torrent_info.piece_length;
 
         FileInfo {
             info_hash: value.torrent_info.info_hash(),
             size,
-            number_pieces,
+            piece_size,
             file_path: value.file.to_path_buf(),
             bitfield: value.bitfield.to_vec(),
         }
