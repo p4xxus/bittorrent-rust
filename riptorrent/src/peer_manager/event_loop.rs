@@ -1,6 +1,7 @@
 use std::{io, path::PathBuf};
 
 use futures_core::Stream;
+use tokio::sync::mpsc;
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use tracing::{info, instrument, trace};
 
@@ -12,8 +13,8 @@ use crate::{
     messages::payloads::BitfieldPayload,
     peer::DEFAULT_MAX_REQUESTS,
     peer_manager::{
-        PeerId, PeerManagerReceiverStream, PieceManager, ReqMessage, ResMessage, TorrentState,
-        emit_torrent_event, error::PeerManagerError,
+        ClientMessage, PeerId, PeerManagerReceiverStream, PieceManager, ReqMessage, ResMessage,
+        TorrentState, emit_torrent_event, error::PeerManagerError,
     },
     torrent::Metainfo,
 };
@@ -24,8 +25,11 @@ impl PeerManager {
     pub(crate) async fn run(
         mut self,
         client_options: ClientOptions,
+        client_receiver: mpsc::Receiver<ClientMessage>,
     ) -> Result<(), PeerManagerError> {
-        let peer_manager_stream = self.construct_stream(&client_options).await?;
+        let peer_manager_stream = self
+            .construct_stream(&client_options, client_receiver)
+            .await?;
         tokio::pin!(peer_manager_stream);
 
         // the first message is always a message to request the tracker which we already did though
@@ -34,7 +38,7 @@ impl PeerManager {
             Some(PeerManagerReceiverStream::SendTrackerUpdate)
         );
 
-        emit_torrent_event(crate::events::TorrentEvent::NewDownload, self.info_hash);
+        emit_torrent_event(crate::events::TorrentEvent::StartDownload, self.info_hash);
         info!("Starting new download");
 
         while let Some(peer_manager_message) = peer_manager_stream.next().await {
@@ -45,7 +49,6 @@ impl PeerManager {
                             self.peers.insert(peer_msg.peer_id, peer_conn);
                             self.piece_selector.add_peer(peer_msg.peer_id);
 
-                            // TODO: here we might want to check interested and also make the peer set its interested flag if he receives this
                             self.send_peer(peer_msg.peer_id, ResMessage::StartDownload)
                                 .await;
                         }
@@ -186,6 +189,21 @@ impl PeerManager {
                     trace!("Having to re-request the tracker");
                     self.req_tracker_add_peers(&client_options).await?
                 }
+                PeerManagerReceiverStream::ClientMessage(client_msg) => match client_msg {
+                    ClientMessage::PauseDownload => {
+                        trace!("Download canceled");
+                        self.broadcast_peers(ResMessage::CancelDownload).await;
+                        emit_torrent_event(crate::events::TorrentEvent::Paused, self.info_hash);
+                    }
+                    ClientMessage::ResumeDownload => {
+                        trace!("Resuming canceled download");
+                        self.broadcast_peers(ResMessage::StartDownload).await;
+                        emit_torrent_event(
+                            crate::events::TorrentEvent::StartDownload,
+                            self.info_hash,
+                        );
+                    }
+                },
             }
         }
 
@@ -198,6 +216,7 @@ impl PeerManager {
     async fn construct_stream(
         &mut self,
         options: &ClientOptions,
+        client_receiver: mpsc::Receiver<ClientMessage>,
     ) -> io::Result<impl Stream<Item = PeerManagerReceiverStream> + use<>> {
         // we gotta make an initial request to the tracker to construct the stream with the interval
         self.req_tracker_add_peers(&options).await?;
@@ -209,11 +228,15 @@ impl PeerManager {
                 .expect("it is set after initialization of Self"),
         )
         .map(PeerManagerReceiverStream::PeerMessage);
+
+        let client_stream =
+            ReceiverStream::new(client_receiver).map(PeerManagerReceiverStream::ClientMessage);
+
         let tracker_stream = futures_util::stream::repeat(0_u8)
             .throttle(self.peer_fetcher.get_tracker_req_interval())
             .map(|_| PeerManagerReceiverStream::SendTrackerUpdate);
 
-        Ok(tracker_stream.merge(peer_stream))
+        Ok(tracker_stream.merge(peer_stream).merge(client_stream))
     }
 
     fn transition_seeding(&mut self) {
@@ -316,7 +339,7 @@ impl Drop for PeerManager {
         // TODO: FinishedFile is not the appropriate message here
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let _ = self.broadcast_peers(ResMessage::FinishedFile).await;
+                let _ = self.broadcast_peers(ResMessage::CancelDownload).await;
             });
         });
     }

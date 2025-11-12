@@ -26,7 +26,8 @@ pub(crate) struct DBEntry {
     pub(crate) announce_list: AnnounceList,
 }
 
-/// This represents the public struct to use when we want to have access to things like the length of the torrent
+/// The naming might be confusing (why not TorrentInfo) but
+/// this represents the public struct to use when we want to have access to things like the length of the torrent
 /// in the end the public view onto the DBEntry
 #[derive(Debug, Clone)]
 pub struct FileInfo {

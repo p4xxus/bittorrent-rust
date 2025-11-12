@@ -60,7 +60,8 @@ impl Debug for ApplicationEvent {
 #[derive(Clone, Debug)]
 pub enum PeerEvent {
     NewConnection(ConnectionType),
-    Disconnected(Arc<PeerError>, ConnectionType),
+    /// contains an optional error (if we're finished and the peer is dropped, there's none) and the connection-type the peer was
+    Disconnected(Option<Arc<PeerError>>, ConnectionType),
 }
 
 #[derive(Clone, Debug)]
@@ -72,11 +73,12 @@ pub enum ConnectionType {
 /// Events that happen for individual torrents
 #[derive(Clone, Debug)]
 pub enum TorrentEvent {
-    NewDownload,
-    /// the naming might be confusing (why not TorrentInfo)
-    /// but it's kina like the public view onto a DBEntry
+    /// both if a download is resumed and if it's started for the first time
+    StartDownload,
+    Paused,
+    Finished,
+
     GotFileInfo(FileInfo),
     GotPiece(u32),
     DownloadCanceled(Arc<PeerManagerError>),
-    Finished,
 }

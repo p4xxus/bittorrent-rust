@@ -93,7 +93,7 @@ impl Peer {
         let prev = self.state.0.am_interested.compare_exchange(
             !interested,
             interested,
-            Ordering::Acquire,
+            Ordering::Release,
             Ordering::Relaxed,
         );
         // if we have actually updated something, send a msg to the peer

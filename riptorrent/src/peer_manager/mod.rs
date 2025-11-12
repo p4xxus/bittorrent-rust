@@ -95,6 +95,14 @@ pub struct ReqMsgFromPeer {
 enum PeerManagerReceiverStream {
     PeerMessage(ReqMsgFromPeer),
     SendTrackerUpdate,
+
+    ClientMessage(ClientMessage),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) enum ClientMessage {
+    PauseDownload,
+    ResumeDownload,
 }
 
 /// A message sent to the peer
@@ -102,6 +110,11 @@ enum PeerManagerReceiverStream {
 pub enum ResMessage {
     /// indication to the peer to start the download loop
     StartDownload,
+    /// if the peer manager quits unexpectedly
+    CancelDownload,
+    /// to pause the download; use StartDownload to continue it
+    PauseDownload,
+
     NewBlockQueue(Vec<RequestPiecePayload>),
     Block(Option<ResponsePiecePayload>),
     /// if it's none, it's empty (we don't know how many pieces yet)
@@ -244,7 +257,7 @@ impl PeerManager {
         }
     }
 
-    pub fn get_sender(&self) -> mpsc::Sender<ReqMsgFromPeer> {
+    pub fn get_peer_sender(&self) -> mpsc::Sender<ReqMsgFromPeer> {
         self.peer_fetcher.tx.clone()
     }
 }

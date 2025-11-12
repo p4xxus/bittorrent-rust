@@ -23,13 +23,18 @@ impl Peer {
     pub async fn run_gracefully(self, info_hash: InfoHash, connection_type: ConnectionType) {
         trace!("New connection.");
 
-        if let Err(peer_error) = self.run().await {
-            error!("Peer quit: {peer_error}");
-            emit_peer_event(
-                crate::events::PeerEvent::Disconnected(Arc::new(peer_error), connection_type),
-                info_hash,
-            );
-        }
+        let optional_error = match self.run().await {
+            Err(peer_error) => {
+                error!("Peer quit: {peer_error}");
+                Some(Arc::new(peer_error))
+            }
+            Ok(_) => None,
+        };
+
+        emit_peer_event(
+            crate::events::PeerEvent::Disconnected(optional_error, connection_type),
+            info_hash,
+        );
     }
 
     async fn run(mut self) -> Result<(), PeerError> {
@@ -42,15 +47,20 @@ impl Peer {
         // for the inital handshake, look in conn.rs
         self.send_extended_handshake().await?;
 
-        // this message is essentially which kick-starts the loop
-        self.send_peer_manager(ReqMessage::WhatDoWeHave).await?;
+        // how this is loop initiated:
+        // - in conn.rs we send a NewConnection
+        // - the PeerManager receives this and sends StartDownload
+        // - we receive the StartDownload and ask which pieces we have
+        // - the peer manager sends us the bitfield and we determine whether we're interested or not
+        //  - if yes: send interested, request queue from manager, wait to become unchoked then request the queue and such
+        //  - if no: well, we don't really do anything
         loop {
             if let Some(message) = receiver_stream.next().await {
                 // debug!("INCOMING: {message:?}");
                 match message {
                     Msg::Manager(peer_msg) => match peer_msg {
                         ResMessage::FinishedFile => {
-                            if !self.state.0.peer_interested.load(Ordering::Relaxed) {
+                            if !self.state.0.peer_interested.load(Ordering::Acquire) {
                                 break Ok(());
                             }
                         }
@@ -67,13 +77,6 @@ impl Peer {
                             self.queue
                                 .to_send
                                 .extend_from_slice(&req_piece_payload_msgs);
-
-                            // TODO: keep interested state up-to-date
-                            // if self.queue.to_send.is_empty() {
-                            //     self.set_interested(false).await?;
-                            // } else {
-                            //     self.set_interested(true).await?;
-                            // };
                         }
                         ResMessage::Block(response_piece_payload) => {
                             if let Some(payload) = response_piece_payload {
@@ -90,9 +93,12 @@ impl Peer {
                                 } else {
                                     self.set_interested(true).await?;
                                     self.send_peer(PeerMessage::Bitfield(bitfield)).await?;
+                                    self.request_block_queue().await?;
                                 }
                             } else {
+                                // we have nothing yet
                                 self.set_interested(true).await?;
+                                self.request_block_queue().await?;
                             };
                         }
                         ResMessage::ExtensionData((ext_type, data)) => {
@@ -116,24 +122,31 @@ impl Peer {
                             }
                         }
                         ResMessage::StartDownload => {
-                            self.request_block_queue().await?;
+                            self.send_peer_manager(ReqMessage::WhatDoWeHave).await?;
+                        }
+                        ResMessage::CancelDownload => {
+                            self.set_interested(false).await?;
+                            break Ok(());
+                        }
+                        ResMessage::PauseDownload => {
+                            self.set_interested(false).await?;
                         }
                     },
                     Msg::Data(message) => match message {
-                        PeerMessage::Choke(_no_payload) => {
+                        PeerMessage::Choke(_) => {
                             self.state.0.peer_choking.store(true, Ordering::Relaxed)
                         }
-                        PeerMessage::Unchoke(_no_payload) => {
+                        PeerMessage::Unchoke(_) => {
                             // dbg!("peer unchokes");
                             self.state.0.peer_choking.store(false, Ordering::Relaxed);
                         }
-                        PeerMessage::Interested(_no_payload) => {
-                            self.state.0.peer_interested.store(true, Ordering::Relaxed);
+                        PeerMessage::Interested(_) => {
+                            self.state.0.peer_interested.store(true, Ordering::Release);
                             // TODO: choking
                             self.send_peer(PeerMessage::Unchoke(NoPayload)).await?;
                         }
-                        PeerMessage::NotInterested(_no_payload) => {
-                            self.state.0.peer_interested.store(false, Ordering::Relaxed);
+                        PeerMessage::NotInterested(_) => {
+                            self.state.0.peer_interested.store(false, Ordering::Release);
                         }
                         PeerMessage::Have(have_payload) => {
                             self.send_peer_manager(ReqMessage::PeerHas(have_payload))
@@ -153,8 +166,8 @@ impl Peer {
                             self.send_peer_manager(ReqMessage::GotBlock(response_piece_payload))
                                 .await?;
                         }
-                        PeerMessage::Cancel(_request_piece_payload) => todo!(),
-                        PeerMessage::KeepAlive(_no_payload) => {}
+                        PeerMessage::Cancel(_) => todo!(),
+                        PeerMessage::KeepAlive(_) => {}
                         PeerMessage::Extended(extension_payload) => {
                             self.on_extension_data(extension_payload).await?;
                         }
@@ -169,6 +182,7 @@ impl Peer {
                 if self.queue.have_sent == 0
                     && self.state.0.am_interested.load(Ordering::Relaxed)
                     && !self.state.0.peer_choking.load(Ordering::Relaxed)
+                // I use relaxed here since Ig, we'll just go to the next iteration if this loads something invalid, nothing will happen really
                 {
                     let queue_iter: Vec<_> = mem::take(&mut self.queue.to_send);
                     self.queue.have_sent = queue_iter.len();
@@ -187,7 +201,7 @@ impl Peer {
     /// requests the queue if our current one is empty and if we're interested
     /// ### first, set the interested state
     async fn request_block_queue(&self) -> Result<(), PeerError> {
-        if self.queue.to_send.is_empty() && self.state.0.am_interested.load(Ordering::Relaxed) {
+        if self.queue.to_send.is_empty() && self.state.0.am_interested.load(Ordering::Acquire) {
             self.send_peer_manager(ReqMessage::NeedBlockQueue).await
         } else {
             Ok(())

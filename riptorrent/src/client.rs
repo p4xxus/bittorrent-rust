@@ -21,19 +21,30 @@ use crate::{
     },
     magnet_links::MagnetLink,
     peer::{error::PeerError, initial_handshake::Handshake},
-    peer_manager::{PeerManager, ReqMsgFromPeer},
+    peer_manager::{ClientMessage, PeerManager, ReqMsgFromPeer},
     torrent::{AnnounceList, InfoHash, Torrent},
 };
 
 pub(crate) const PEER_ID: &[u8; 20] = b"-AZ2060-222222222222";
 
 const DATABASE_NAME: &str = "files";
+const CLIENT_CHANNEL_SIZE: usize = 16; // I think thats enough for simple pause/resume messages
 
 #[derive(Debug, Clone)]
 pub struct Client {
     db_conn: Arc<SurrealDbConn>,
-    peer_managers: Arc<Mutex<HashMap<InfoHash, mpsc::Sender<ReqMsgFromPeer>>>>,
+    peer_managers: Arc<Mutex<HashMap<InfoHash, PeerManagerSender>>>,
     options: ClientOptions,
+}
+
+/// The different sender we need in the client
+#[derive(Debug, Clone)]
+struct PeerManagerSender {
+    /// To initiate new peers from the client
+    peer_messages: mpsc::Sender<ReqMsgFromPeer>,
+    /// To send messages from the client directly
+    /// Theoretically there can be more than one sender, I don't really care right now about this tbh
+    client_messages: mpsc::Sender<ClientMessage>,
 }
 
 /// A struct that represents all the possible options for a session (client).
@@ -183,6 +194,30 @@ impl Client {
             .collect()
     }
 
+    pub async fn pause_download(&self, info_hash: &InfoHash) -> bool {
+        let peer_manager = self.peer_managers.lock().unwrap();
+        let Some(peer_manager) = peer_manager.get(info_hash) else {
+            return false;
+        };
+        peer_manager
+            .client_messages
+            .send(ClientMessage::PauseDownload)
+            .await
+            .is_ok()
+    }
+
+    pub async fn resume_download(&self, info_hash: &InfoHash) -> bool {
+        let peer_manager = self.peer_managers.lock().unwrap();
+        let Some(peer_manager) = peer_manager.get(info_hash) else {
+            return false;
+        };
+        peer_manager
+            .client_messages
+            .send(ClientMessage::ResumeDownload)
+            .await
+            .is_ok()
+    }
+
     fn is_already_downloading(&self, info_hash: &InfoHash) -> bool {
         self.peer_managers.lock().unwrap().contains_key(info_hash)
     }
@@ -259,7 +294,18 @@ impl Client {
         let peer_managers = Arc::clone(&self.peer_managers);
         let client_options = self.options;
         tokio::spawn(async move {
-            if let Err(err) = peer_manager.run(client_options).await {
+            // construct the sender/receiver pair for us (the client) to send messages to the peer manager (pause/continue)
+            let (client_tx, client_rx) = mpsc::channel(CLIENT_CHANNEL_SIZE);
+            peer_managers.lock().unwrap().insert(
+                info_hash,
+                PeerManagerSender {
+                    peer_messages: peer_manager.get_peer_sender(),
+                    client_messages: client_tx,
+                },
+            );
+
+            // run it
+            if let Err(err) = peer_manager.run(client_options, client_rx).await {
                 error!("Peer Manager cancelled the download: {}", err);
                 emit_torrent_event(
                     crate::events::TorrentEvent::DownloadCanceled(Arc::new(err)),
@@ -299,7 +345,7 @@ impl Client {
                                     crate::Peer::new_from_stream(
                                         tcp_stream,
                                         handshake_recv,
-                                        peer_manager_tx.clone(),
+                                        peer_manager_tx.peer_messages,
                                     )
                                     .await
                                 }
@@ -318,7 +364,7 @@ impl Client {
                                             entry,
                                         )
                                         .map_err(|e| PeerError::Other(e.into()))?;
-                                        let peer_manager_tx = peer_manager.get_sender();
+                                        let peer_manager_tx = peer_manager.get_peer_sender();
 
                                         client.start_peer_manager(peer_manager);
 

@@ -1,5 +1,6 @@
-use std::time::Instant;
+use std::{io::Stdout, time::Instant};
 
+use ratatui::{Terminal, prelude::CrosstermBackend};
 use riptorrent::ClientOptions;
 use tachyonfx::{EffectTimer, Interpolation, fx};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -20,8 +21,7 @@ async fn main() -> color_eyre::Result<()> {
     tracing_subscriber::registry()
         .with(tui_logger::TuiTracingSubscriberLayer)
         .init();
-    tui_logger::init_logger(tui_logger::LevelFilter::Info)?;
-    tui_logger::set_default_level(log::LevelFilter::Trace);
+    tui_logger::init_logger(tui_logger::LevelFilter::Warn)?;
     tui_logger::set_env_filter_from_string("riptorrent");
 
     let client = ClientOptions::default()
@@ -47,7 +47,17 @@ async fn main() -> color_eyre::Result<()> {
         }
     }
 
-    let timer = EffectTimer::from_ms(1000, Interpolation::Linear);
+    explode(&mut terminal, model)?;
+    ratatui::restore();
+
+    Ok(())
+}
+
+fn explode(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    mut model: Model,
+) -> color_eyre::Result<()> {
+    let timer = EffectTimer::from_ms(1000, Interpolation::QuadInOut);
     let mut explode_effect =
         fx::explode(5.0, 4.0, timer).with_color_space(tachyonfx::ColorSpace::Rgb);
 
@@ -56,13 +66,11 @@ async fn main() -> color_eyre::Result<()> {
         let elapsed = last_frame.elapsed();
         last_frame = Instant::now();
         terminal.draw(|f| {
+            render_view(&mut model, f);
             // Apply effects
             let area = f.area();
             explode_effect.process(elapsed.into(), f.buffer_mut(), area);
         })?;
     }
-
-    ratatui::restore();
-
     Ok(())
 }

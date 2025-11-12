@@ -184,6 +184,7 @@ impl PeerState {
             peer_id,
             msg: ReqMessage::NewConnection(peer_conn),
         };
+        // this kick-starts the loop
         send_peer_manager(peer_manager_tx, msg, peer_id).await?;
 
         Ok(peer_manager_rx)
