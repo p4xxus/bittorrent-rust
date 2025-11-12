@@ -1,5 +1,4 @@
 use bytesize::ByteSize;
-use log::warn;
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect, Spacing},

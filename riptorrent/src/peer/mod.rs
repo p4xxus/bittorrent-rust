@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 
 use futures_util::{self, SinkExt};
 use tokio::sync::mpsc;
+use tracing::trace;
 
 use crate::extensions::ExtensionHandler;
 use crate::messages::PeerMessage;
@@ -70,6 +71,7 @@ impl Peer {
         let msg = ReqMsgFromPeer { peer_id, msg };
         send_peer_manager(&self.peer_manager_tx, msg, peer_id).await
     }
+
     async fn send_peer(&mut self, msg: PeerMessage) -> Result<(), PeerError> {
         let msg_type_str = msg
             .get_msg_type()
@@ -103,6 +105,7 @@ impl Peer {
             } else {
                 PeerMessage::NotInterested(NoPayload)
             };
+            trace!("Sending interested state: {interested}");
             self.send_peer(msg).await
         } else {
             Ok(())

@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use log::warn;
 use riptorrent::{client::Client, database::FileInfo, events::ApplicationEvent, torrent::InfoHash};
 use tui_input::Input;
 
@@ -56,6 +55,7 @@ pub struct TorrentInfo {
     pub file_path: PathBuf,
     pub bitfield: Vec<bool>,
     pub peer_connections: PeerConnections,
+    pub is_paused: bool,
 }
 
 #[derive(Debug)]
@@ -72,6 +72,7 @@ impl From<FileInfo> for TorrentInfo {
             file_path: value.file_path,
             bitfield: value.bitfield,
             peer_connections: PeerConnections::default(),
+            is_paused: false,
         }
     }
 }
@@ -124,6 +125,8 @@ pub enum Message {
     InitAddTorrent,
     /// after we entered something
     AddTorrent(TorrentType),
+
+    PauseResumeTorrent,
 
     Quit,
 }
@@ -221,5 +224,9 @@ impl TorrentListState {
             //     self.offset = i - max_visible_lines + 1;
             // }
         }
+    }
+
+    pub(crate) fn absolute_selection_index(&self) -> usize {
+        self.selected.unwrap_or_default()
     }
 }

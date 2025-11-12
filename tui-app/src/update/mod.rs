@@ -31,9 +31,21 @@ pub(crate) async fn update(model: &mut Model, msg: Message) {
             model.go_to_main_page();
             // model.running = false;
         }
-
         Message::ApplicationEvent(application_event) => {
             update_from_application_event(model, application_event)
+        }
+        Message::PauseResumeTorrent => {
+            let Some(torrent_info) = model
+                .get_torrents()
+                .get(model.list_state.absolute_selection_index())
+            else {
+                return;
+            };
+
+            match torrent_info.is_paused {
+                true => model.client.resume_download(&torrent_info.info_hash).await,
+                false => model.client.pause_download(&torrent_info.info_hash).await,
+            };
         }
     }
 }

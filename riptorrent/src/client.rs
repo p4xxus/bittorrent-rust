@@ -194,28 +194,28 @@ impl Client {
             .collect()
     }
 
-    pub async fn pause_download(&self, info_hash: &InfoHash) -> bool {
+    pub async fn pause_download(&self, info_hash: &InfoHash) {
         let peer_manager = self.peer_managers.lock().unwrap();
         let Some(peer_manager) = peer_manager.get(info_hash) else {
-            return false;
+            return;
         };
-        peer_manager
+        // we'll send a message to the application if we paused or not, so we don't really care about any error here
+        let _ = peer_manager
             .client_messages
             .send(ClientMessage::PauseDownload)
-            .await
-            .is_ok()
+            .await;
     }
 
-    pub async fn resume_download(&self, info_hash: &InfoHash) -> bool {
+    pub async fn resume_download(&self, info_hash: &InfoHash) {
         let peer_manager = self.peer_managers.lock().unwrap();
         let Some(peer_manager) = peer_manager.get(info_hash) else {
-            return false;
+            return;
         };
-        peer_manager
+        // we'll send a message to the application if we paused or not, so we don't really care about any error here
+        let _ = peer_manager
             .client_messages
             .send(ClientMessage::ResumeDownload)
-            .await
-            .is_ok()
+            .await;
     }
 
     fn is_already_downloading(&self, info_hash: &InfoHash) -> bool {

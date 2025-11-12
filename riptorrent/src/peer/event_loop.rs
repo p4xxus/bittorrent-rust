@@ -74,6 +74,10 @@ impl Peer {
                                 .into_iter()
                                 .map(PeerMessage::Request)
                                 .collect();
+                            trace!(
+                                "Block queue of size {} coming",
+                                req_piece_payload_msgs.len()
+                            );
                             self.queue
                                 .to_send
                                 .extend_from_slice(&req_piece_payload_msgs);
@@ -93,7 +97,11 @@ impl Peer {
                                 } else {
                                     self.set_interested(true).await?;
                                     self.send_peer(PeerMessage::Bitfield(bitfield)).await?;
-                                    self.request_block_queue().await?;
+
+                                    // if we resumed it after pausing, we might still have something left in the queue
+                                    if self.queue.to_send.is_empty() {
+                                        self.request_block_queue().await?;
+                                    }
                                 }
                             } else {
                                 // we have nothing yet
@@ -137,7 +145,7 @@ impl Peer {
                             self.state.0.peer_choking.store(true, Ordering::Relaxed)
                         }
                         PeerMessage::Unchoke(_) => {
-                            // dbg!("peer unchokes");
+                            trace!("peer unchokes");
                             self.state.0.peer_choking.store(false, Ordering::Relaxed);
                         }
                         PeerMessage::Interested(_) => {

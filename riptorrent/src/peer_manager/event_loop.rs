@@ -191,17 +191,14 @@ impl PeerManager {
                 }
                 PeerManagerReceiverStream::ClientMessage(client_msg) => match client_msg {
                     ClientMessage::PauseDownload => {
-                        trace!("Download canceled");
-                        self.broadcast_peers(ResMessage::CancelDownload).await;
+                        trace!("Download paused");
+                        self.broadcast_peers(ResMessage::PauseDownload).await;
                         emit_torrent_event(crate::events::TorrentEvent::Paused, self.info_hash);
                     }
                     ClientMessage::ResumeDownload => {
-                        trace!("Resuming canceled download");
+                        trace!("Resuming paused download");
                         self.broadcast_peers(ResMessage::StartDownload).await;
-                        emit_torrent_event(
-                            crate::events::TorrentEvent::StartDownload,
-                            self.info_hash,
-                        );
+                        emit_torrent_event(crate::events::TorrentEvent::Resumed, self.info_hash);
                     }
                 },
             }

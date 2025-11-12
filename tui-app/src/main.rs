@@ -21,11 +21,11 @@ async fn main() -> color_eyre::Result<()> {
     tracing_subscriber::registry()
         .with(tui_logger::TuiTracingSubscriberLayer)
         .init();
-    tui_logger::init_logger(tui_logger::LevelFilter::Warn)?;
-    // tui_logger::set_env_filter_from_string("riptorrent");
+    tui_logger::set_env_filter_from_string("riptorrent");
+    tui_logger::init_logger(tui_logger::LevelFilter::Trace)?;
 
     let client = ClientOptions::default()
-        .with_continue_download(false)
+        .with_continue_download(true)
         .build()
         .await
         .expect("Failed to initialize the client.");

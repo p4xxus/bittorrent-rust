@@ -73,9 +73,9 @@ pub enum ConnectionType {
 /// Events that happen for individual torrents
 #[derive(Clone, Debug)]
 pub enum TorrentEvent {
-    /// both if a download is resumed and if it's started for the first time
     StartDownload,
     Paused,
+    Resumed,
     Finished,
 
     GotFileInfo(FileInfo),

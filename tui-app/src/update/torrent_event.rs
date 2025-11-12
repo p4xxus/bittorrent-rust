@@ -45,7 +45,16 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
 
         ApplicationEvent::Torrent(torrent_event, info_hash) => match torrent_event {
             riptorrent::events::TorrentEvent::StartDownload => (),
-            riptorrent::events::TorrentEvent::Paused => todo!(),
+            riptorrent::events::TorrentEvent::Paused => {
+                if let Some(torrent) = model.get_torrent_from_info_hash_mut(&info_hash) {
+                    torrent.is_paused = true
+                }
+            }
+            riptorrent::events::TorrentEvent::Resumed => {
+                if let Some(torrent) = model.get_torrent_from_info_hash_mut(&info_hash) {
+                    torrent.is_paused = false
+                }
+            }
             riptorrent::events::TorrentEvent::GotFileInfo(file_info) => {
                 model.push_torrent_info(file_info.into());
             }

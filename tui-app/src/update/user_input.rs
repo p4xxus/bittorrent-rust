@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ratatui::crossterm::event::{self, Event};
+use ratatui::crossterm::event::{self, Event, MediaKeyCode};
 use tui_input::backend::crossterm::EventHandler;
 
 use crate::model::{Message, Model, TorrentType};
@@ -22,6 +22,11 @@ pub fn handle_user_input(model: &mut Model) -> color_eyre::Result<Option<Message
                         event::KeyCode::Up | event::KeyCode::Char('k') => {
                             model.list_state.previous();
                             None
+                        }
+                        event::KeyCode::Char(' ')
+                        | event::KeyCode::Pause
+                        | event::KeyCode::Media(MediaKeyCode::PlayPause) => {
+                            Some(Message::PauseResumeTorrent)
                         }
                         _ => handle_key_global(key),
                     })
