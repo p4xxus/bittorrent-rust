@@ -16,10 +16,10 @@ mod common;
 mod logger;
 mod torrent_list;
 
-pub fn render_view(model: &Model, frame: &mut Frame) {
+pub fn render_view(model: &mut Model, frame: &mut Frame) {
     // realistically it should be one above
     let horizontal_layout = Layout::horizontal(vec![Constraint::Fill(1), Constraint::Fill(1)])
-        .margin(2)
+        .margin(1)
         .split(frame.area());
     let app_viewport = horizontal_layout[0];
 

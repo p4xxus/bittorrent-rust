@@ -22,7 +22,7 @@ async fn main() -> color_eyre::Result<()> {
         .with(tui_logger::TuiTracingSubscriberLayer)
         .init();
     tui_logger::init_logger(tui_logger::LevelFilter::Warn)?;
-    tui_logger::set_env_filter_from_string("riptorrent");
+    // tui_logger::set_env_filter_from_string("riptorrent");
 
     let client = ClientOptions::default()
         .with_continue_download(false)
@@ -47,7 +47,7 @@ async fn main() -> color_eyre::Result<()> {
         }
     }
 
-    explode(&mut terminal, model)?;
+    // explode(&mut terminal, model)?;
     ratatui::restore();
 
     Ok(())

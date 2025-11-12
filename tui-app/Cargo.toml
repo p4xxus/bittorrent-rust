@@ -17,3 +17,4 @@ tui-logger = { version = "0.17.4", features = ["tracing-support"] }
 tracing-subscriber = "0.3.20"
 log = "0.4.28"
 tachyonfx = "0.20.1"
+bytesize = "2.2.0"

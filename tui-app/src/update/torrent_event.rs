@@ -18,7 +18,7 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
     match event {
         ApplicationEvent::Peer(peer_event, info_hash) => match peer_event {
             riptorrent::events::PeerEvent::NewConnection(connection_type) => {
-                if let Some(torrent) = model.torrents.get_mut(&info_hash) {
+                if let Some(torrent) = model.get_torrent_from_info_hash_mut(&info_hash) {
                     match connection_type {
                         riptorrent::events::ConnectionType::Inbound => {
                             torrent.peer_connections.increase_inbound(1)
@@ -30,7 +30,7 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
                 }
             }
             riptorrent::events::PeerEvent::Disconnected(_, connection_type) => {
-                if let Some(torrent) = model.torrents.get_mut(&info_hash) {
+                if let Some(torrent) = model.get_torrent_from_info_hash_mut(&info_hash) {
                     match connection_type {
                         riptorrent::events::ConnectionType::Inbound => {
                             torrent.peer_connections.increase_inbound(-1)
@@ -47,10 +47,10 @@ pub(super) fn update_from_application_event(model: &mut Model, event: Applicatio
             riptorrent::events::TorrentEvent::StartDownload => (),
             riptorrent::events::TorrentEvent::Paused => todo!(),
             riptorrent::events::TorrentEvent::GotFileInfo(file_info) => {
-                model.torrents.insert(file_info.info_hash, file_info.into());
+                model.push_torrent_info(file_info.into());
             }
             riptorrent::events::TorrentEvent::GotPiece(piece_i) => {
-                if let Some(torrent) = model.torrents.get_mut(&info_hash)
+                if let Some(torrent) = model.get_torrent_from_info_hash_mut(&info_hash)
                     && let Some(we_have) = torrent.bitfield.get_mut(piece_i as usize)
                 {
                     *we_have = true

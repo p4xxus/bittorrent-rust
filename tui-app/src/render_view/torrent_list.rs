@@ -1,3 +1,5 @@
+use bytesize::ByteSize;
+use log::warn;
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect, Spacing},
@@ -8,43 +10,74 @@ use ratatui::{
 
 use crate::model::{Model, TorrentInfo};
 
-pub(super) fn render_torrent_list(model: &Model, frame: &mut Frame, viewport: Rect) {
-    let row_layout = Layout::vertical(vec![Constraint::Length(5); model.torrents.values().count()])
-        .margin(2)
-        .spacing(Spacing::Space(1))
-        .split(viewport);
+const ITEM_HEIGHT: u16 = 5;
 
-    for (index, torrent_info) in model.torrents.values().enumerate() {
+pub(super) fn render_torrent_list(model: &mut Model, frame: &mut Frame, viewport: Rect) {
+    let row_layout = Layout::vertical(vec![
+        Constraint::Max(ITEM_HEIGHT);
+        model.get_torrents().len()
+    ])
+    .margin(1)
+    .spacing(Spacing::Space(1))
+    .split(viewport);
+
+    // 1. Calculate the available area and max items that can be shown
+    let max_visible_items = (viewport.height / ITEM_HEIGHT) as usize;
+
+    let visible_item_range = model.list_state.get_visible_item_range(max_visible_items);
+    let visible_items = &model.get_torrents()[visible_item_range];
+    // if it's None (no torrents), we have selected the first element which is fine, since there won't be any shown here
+    let selected_index = model.list_state.relative_selected_index();
+
+    for (index, torrent_info) in visible_items.iter().enumerate() {
         let area = row_layout[index];
         let column_layout = Layout::horizontal(Constraint::from_fills([1, 2]));
         let [paragraph_area, gauge_area] = column_layout.areas(area);
 
         render_gauge(frame, torrent_info, gauge_area);
 
-        render_torrent_information(frame, torrent_info, paragraph_area);
+        let is_selected = index == selected_index;
+        render_torrent_information(frame, torrent_info, paragraph_area, is_selected);
     }
 }
 
 fn render_gauge(frame: &mut Frame, torrent_info: &TorrentInfo, area: Rect) {
     let ratio = calculate_torrent_ratio(torrent_info);
+
     let gauge = Gauge::default()
         .ratio(ratio)
-        .label((ratio * 100.0).to_string())
+        .label(format_ratio(ratio, torrent_info.size))
+        .italic()
         .add_modifier(Modifier::DIM)
         .gauge_style(value_to_color(ratio));
+
+    fn format_ratio(ratio: f64, total_size: u64) -> String {
+        format!("{:.2} / {}", ratio * 100.0, ByteSize::b(total_size))
+    }
 
     frame.render_widget(gauge, area);
 }
 
-fn render_torrent_information(frame: &mut Frame, torrent_info: &TorrentInfo, area: Rect) {
+fn render_torrent_information(
+    frame: &mut Frame,
+    torrent_info: &TorrentInfo,
+    area: Rect,
+    is_selected: bool,
+) {
     let [torrent_name_area, peer_connections_area] =
         Layout::horizontal([Constraint::Fill(4), Constraint::Fill(1)])
             .flex(Flex::SpaceBetween)
             .areas(area);
 
     //      name
-    let paragraph =
-        Paragraph::new(torrent_info.file_path.display().to_string()).wrap(Wrap { trim: true });
+    let modifier = is_selected
+        .then_some(Modifier::REVERSED)
+        .unwrap_or_default();
+    let paragraph = Paragraph::new(torrent_info.file_path.display().to_string())
+        .bold()
+        .magenta()
+        .wrap(Wrap { trim: true })
+        .add_modifier(modifier);
     frame.render_widget(paragraph, torrent_name_area);
 
     //      peer connections
