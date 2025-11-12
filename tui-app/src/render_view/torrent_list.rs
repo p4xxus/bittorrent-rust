@@ -48,7 +48,13 @@ fn render_gauge(frame: &mut Frame, torrent_info: &TorrentInfo, area: Rect) {
         .label(format_ratio(ratio, torrent_info.size))
         .italic()
         .add_modifier(Modifier::DIM)
-        .gauge_style(value_to_color(ratio));
+        .gauge_style({
+            if torrent_info.is_paused {
+                Color::Gray
+            } else {
+                value_to_color(ratio)
+            }
+        });
 
     fn format_ratio(ratio: f64, total_size: u64) -> String {
         format!("{:.2} / {}", ratio * 100.0, ByteSize::b(total_size))
