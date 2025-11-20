@@ -1,5 +1,7 @@
 This project started out on codecrafters: [link to the challenge](https://app.codecrafters.io/courses/bittorrent/introduction)
 
+# this description is outdated. I've built a ui for this you can use via `cargo r` but have not added documentation yet
+
 # a BitTorrent implementation in Rust
 
 I somehow found pretty big interest in peer-to-peer communication. I found a challenge where you implement BitTorrent by yourself from scratch on a pretty cool coding website (see above). Now I completed the main part (it's only partial on their website) and want to implement the rest of the [protocol](https://bittorrent.org/beps/bep_0003.html) (no extensions).
@@ -13,7 +15,7 @@ You cannot seed yet.
 ## features (done / want to add)
 
 - [X] downloading a file from the peers of the tracker found in the .torrent file
-- [X] ok, I added the ut_metadata extension to support magnet_links
+- [X] added the ut_metadata extension to support magnet_links
 - [x] seeding a file (I sadly cannot really test it right now though)
 - [X] storing the state of a file to disk so that you can stop a download and continue later
 - [x] periodically requesting the tracker to get peers and shit
