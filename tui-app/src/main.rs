@@ -26,6 +26,7 @@ async fn main() -> color_eyre::Result<()> {
 
     let client = ClientOptions::default()
         .with_continue_download(true)
+        .with_port(6343)
         .build()
         .await
         .expect("Failed to initialize the client.");

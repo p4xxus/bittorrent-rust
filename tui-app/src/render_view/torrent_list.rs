@@ -43,21 +43,24 @@ pub(super) fn render_torrent_list(model: &mut Model, frame: &mut Frame, viewport
 fn render_gauge(frame: &mut Frame, torrent_info: &TorrentInfo, area: Rect) {
     let ratio = calculate_torrent_ratio(torrent_info);
 
+    let mut label = get_ratio(ratio, torrent_info.size);
+    if torrent_info.is_paused {
+        label.push_str("    Paused");
+    }
+
     let gauge = Gauge::default()
         .ratio(ratio)
-        .label(format_ratio(ratio, torrent_info.size))
+        .label(label)
         .italic()
         .add_modifier(Modifier::DIM)
-        .gauge_style({
-            if torrent_info.is_paused {
-                Color::Gray
-            } else {
-                value_to_color(ratio)
-            }
+        .gauge_style(if torrent_info.is_paused {
+            Color::Gray
+        } else {
+            value_to_color(ratio)
         });
 
-    fn format_ratio(ratio: f64, total_size: u64) -> String {
-        format!("{:.2} / {}", ratio * 100.0, ByteSize::b(total_size))
+    fn get_ratio(ratio: f64, total_size: u64) -> String {
+        format!("{:.2}% of {}", ratio * 100.0, ByteSize::b(total_size))
     }
 
     frame.render_widget(gauge, area);

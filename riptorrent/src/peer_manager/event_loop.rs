@@ -186,17 +186,17 @@ impl PeerManager {
                     }
                 }
                 PeerManagerReceiverStream::SendTrackerUpdate => {
-                    trace!("Having to re-request the tracker");
+                    info!("Having to re-request the tracker");
                     self.req_tracker_add_peers(&client_options).await?
                 }
                 PeerManagerReceiverStream::ClientMessage(client_msg) => match client_msg {
                     ClientMessage::PauseDownload => {
-                        trace!("Download paused");
+                        info!("Download paused");
                         self.broadcast_peers(ResMessage::PauseDownload).await;
                         emit_torrent_event(crate::events::TorrentEvent::Paused, self.info_hash);
                     }
                     ClientMessage::ResumeDownload => {
-                        trace!("Resuming paused download");
+                        info!("Resuming paused download");
                         self.broadcast_peers(ResMessage::StartDownload).await;
                         emit_torrent_event(crate::events::TorrentEvent::Resumed, self.info_hash);
                     }

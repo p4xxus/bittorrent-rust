@@ -138,6 +138,11 @@ impl ClientOptions {
         self.continue_download = continue_download;
         self
     }
+
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
 }
 
 impl Client {

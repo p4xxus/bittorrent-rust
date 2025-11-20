@@ -3,7 +3,7 @@ use std::{
     mem,
     sync::{Arc, atomic::Ordering},
 };
-use tracing::{error, instrument, trace};
+use tracing::{error, info, instrument, trace, warn};
 
 use crate::{
     events::{ConnectionType, emit_peer_event},
@@ -21,11 +21,11 @@ impl Peer {
     /// runs the peer manager in this thread and handles its errors
     #[instrument(name = "Peer", skip_all ,fields(%info_hash, connection_type))]
     pub async fn run_gracefully(self, info_hash: InfoHash, connection_type: ConnectionType) {
-        trace!("New connection.");
+        info!("New connection.");
 
         let optional_error = match self.run().await {
             Err(peer_error) => {
-                error!("Peer quit: {peer_error}");
+                warn!("Peer quit: {peer_error}");
                 Some(Arc::new(peer_error))
             }
             Ok(_) => None,
